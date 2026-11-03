@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HR Nguyễn Tuấn Hảo | Quản trị nhân sự</title>
+<style>
+:root{--navy:#101d32;--blue:#b58a4a;--pale:#f5f1e9;--line:#e6dfd2;--ink:#202a39;--muted:#7b8492;--red:#c94b4b;--green:#247b5b}
+*{box-sizing:border-box}body{margin:0;background:#f4f2ed;color:var(--ink);font:14px/1.5 Inter,'Segoe UI',Arial,sans-serif}
+.sidebar{position:fixed;inset:0 auto 0 0;width:248px;background:linear-gradient(165deg,#14243a,#0b1525);color:#fff;padding:27px 17px;box-shadow:8px 0 30px #15223812}
+.brand{font-size:19px;font-weight:850;letter-spacing:2px;padding:0 12px 30px;color:#e2c28d}.brand small{display:block;font-size:11px;color:#a9bdd7;font-weight:500;margin-top:4px}
+.nav{display:grid;gap:7px}.nav button{border:0;background:transparent;color:#d9e4f2;text-align:left;padding:12px;border-radius:9px;font-size:14px;cursor:pointer}.nav button.active,.nav button:hover{background:linear-gradient(90deg,#b58a4a33,#b58a4a12);color:#f1d6a8;border-left:3px solid #c9a56c}
+.main{margin-left:248px;padding:32px;max-width:1900px}.top{display:flex;justify-content:space-between;align-items:center;gap:15px;margin-bottom:22px}.eyebrow{color:var(--blue);font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px}.title{font-size:29px;font-weight:800;margin:4px 0;color:#17263b;letter-spacing:-.5px}.sub{color:var(--muted)}
+.btn{border:1px solid var(--line);background:#fff;border-radius:9px;padding:10px 13px;cursor:pointer;font-weight:650;color:var(--ink)}.btn.primary{background:linear-gradient(135deg,#b58a4a,#92703d);color:#fff;border-color:#a47b42}.btn:active{transform:translateY(1px)}
+.cards{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:14px;margin-bottom:18px}.card,.panel{background:#fff;border:1px solid #e9e2d7;border-radius:16px;box-shadow:0 8px 28px #24334a0a}.card{padding:19px;border-top:3px solid #c3a16b}.card .label{color:var(--muted);font-size:12px}.card .num{font-size:27px;font-weight:800;margin-top:6px}.card .hint{font-size:11px;color:var(--muted)}
+.panel{padding:18px;margin-bottom:18px}.toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}.toolbar h2{font-size:17px;margin:0}.controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}input,select{border:1px solid var(--line);border-radius:8px;padding:9px 10px;background:#fff;color:var(--ink)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;color:var(--muted);font-size:12px;margin:8px 0 14px}.dot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:middle}.dot.busy{background:#ef4444}.dot.work{background:#dceafe;border:1px solid #8eb4ee}.dot.empty{background:#fff;border:1px solid #b9c4d3}
+.tablewrap{overflow:auto;border:1px solid var(--line);border-radius:10px}table{border-collapse:separate;border-spacing:0;min-width:1180px;width:100%;font-size:11px}th,td{border-right:1px solid #e5eaf1;border-bottom:1px solid #e5eaf1;text-align:center;padding:7px 4px;min-width:48px}thead th{background:#f1ece2;color:#39465a;font-weight:750;position:sticky;top:0;z-index:2}thead tr:first-child th{background:#e8dfcf;font-size:12px}th.name,td.name{position:sticky;left:0;z-index:3;min-width:160px;text-align:left;background:#fff;font-weight:700;padding-left:10px}thead th.name{z-index:5;background:#e8dfcf}.total{position:sticky;right:0;background:#f4f8ff;font-weight:800;z-index:3;min-width:74px}.shift-cell.day-end,thead th.day-end{border-right:3px solid #b58a4a!important}.dayhead{display:flex;flex-direction:column;gap:2px;align-items:center}.dayhead .weekday{font-weight:800}.dayhead .date{font-size:11px;opacity:.8}.cell{cursor:pointer;font-weight:800;border-radius:4px;min-width:42px;display:block;padding:7px 1px}.cell.busy{background:#ef4444;color:white}.cell.work{background:#e7f0ff;color:#174b91}.cell.extra{background:#d8f4e8;color:#126344}.cell.empty{color:#c3cad5}.cell:hover{outline:2px solid #4b80c7;outline-offset:-2px}.coverage{font-weight:800;color:#b42318}.coverage.good{color:var(--green)}.footnote{font-size:12px;color:var(--muted);margin-top:10px}.section{display:none}.section.active{display:block}.empty-state{padding:35px;text-align:center;color:var(--muted)}.formgrid{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:10px;margin:14px 0}.formgrid label{display:grid;gap:5px;font-size:12px;color:var(--muted);font-weight:700}.formgrid input,.formgrid select{width:100%}.status-pill{display:inline-block;padding:4px 8px;border-radius:20px;font-size:11px;font-weight:800;background:#fff4d6;color:#8a5a00}.status-pill.approved{background:#dcfce7;color:#166534}.status-pill.rejected{background:#fee2e2;color:#991b1b}.monthly-box{margin-top:16px}.monthly-box h3{font-size:15px}.smallbtn{padding:6px 9px;font-size:11px;margin:2px}@media(max-width:850px){.formgrid{grid-template-columns:repeat(2,minmax(130px,1fr))}}
+@media(max-width:850px){.sidebar{position:static;width:auto;padding:13px 12px}.brand{padding:4px 8px 12px}.nav{display:flex;overflow:auto;gap:5px}.nav button{white-space:nowrap;padding:10px}.main{margin:0;padding:14px}.cards{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.card{padding:12px}.card .num{font-size:23px}.top{align-items:flex-start;flex-direction:column}.title{font-size:22px}.panel{padding:13px}.formgrid{grid-template-columns:repeat(2,minmax(0,1fr))}.tablewrap{max-width:calc(100vw - 56px)}input,select{max-width:100%;min-width:0}}
+@media(max-width:480px){.cards{grid-template-columns:1fr 1fr}.formgrid{grid-template-columns:1fr}.formgrid label[style*="grid-column"]{grid-column:auto!important}.controls{width:100%}.controls .btn{flex:1}.toolbar{align-items:flex-start}.brand{font-size:19px}}
+.authveil{position:fixed;inset:0;background:#0c1728dd;backdrop-filter:blur(8px);z-index:1000;display:grid;place-items:center;padding:18px}
+.authbox{width:min(430px,100%);background:#fff;border:1px solid #e6dccb;border-radius:22px;padding:28px;box-shadow:0 25px 80px #0004}
+.authbrand{font-size:22px;font-weight:900;letter-spacing:3px;color:#a77d43}.authbox h2{margin:7px 0 4px;font-size:22px}.authbox p{color:#77808e;font-size:13px}.authbox label{display:grid;gap:6px;margin:13px 0;font-weight:700;font-size:12px;color:#596477}.authbox input,.authbox select{width:100%;padding:12px}.authbox .btn{width:100%;margin-top:8px}.rolebar{font-size:12px;color:#657184;background:#fff;border:1px solid var(--line);border-radius:12px;padding:9px 12px}.rolebar b{color:#9a7138}.hidden{display:none!important}
+
+.dayhead{display:flex;flex-direction:column;align-items:center;gap:2px;line-height:1.25;padding:3px 0}
+.dayhead .weekday{font-size:11px;font-weight:800;letter-spacing:.35px;color:#f4d59f}
+.dayhead .date{font-size:13px;font-weight:700;color:#fff}
+.dayhead.weekend{background:#8e4b42;border-radius:7px;margin:-3px;padding:5px 2px}
+.dayhead.weekend .weekday{color:#ffe1d9}
+.photo-cell{min-width:125px}
+.photo-preview{display:block;width:76px;height:58px;object-fit:cover;border-radius:7px;border:1px solid var(--line);margin-top:5px}
+.photo-upload{display:block;max-width:180px;font-size:11px;margin:4px 0}
+
+
+/* Header ngày nổi bật hơn */
+thead tr:first-child th:nth-child(2) .dayhead{background:linear-gradient(135deg,#1769aa,#0d477d);border-radius:9px;padding:7px 4px;margin:-4px 0}
+thead tr:first-child th:nth-child(3) .dayhead{background:linear-gradient(135deg,#087f8c,#07545d);border-radius:9px;padding:7px 4px;margin:-4px 0}
+thead tr:first-child th:nth-child(4) .dayhead{background:linear-gradient(135deg,#5b55b5,#39347e);border-radius:9px;padding:7px 4px;margin:-4px 0}
+thead tr:first-child th:nth-child(5) .dayhead{background:linear-gradient(135deg,#a34f9d,#71336d);border-radius:9px;padding:7px 4px;margin:-4px 0}
+thead tr:first-child th:nth-child(6) .dayhead{background:linear-gradient(135deg,#287a50,#185735);border-radius:9px;padding:7px 4px;margin:-4px 0}
+thead tr:first-child th:nth-child(7) .dayhead{background:linear-gradient(135deg,#b66b20,#804512);border-radius:9px;padding:7px 4px;margin:-4px 0}
+thead tr:first-child th:nth-child(8) .dayhead{background:linear-gradient(135deg,#c0394b,#812337);border-radius:9px;padding:7px 4px;margin:-4px 0}
+.dayhead .weekday{font-size:12px!important;color:#fff!important;font-weight:900!important;letter-spacing:.5px}
+.dayhead .date{font-size:15px!important;color:#fff!important;font-weight:900!important}
+.dayhead.weekend{outline:2px solid #ffbd69;box-shadow:0 2px 8px #8b263344}
+.cell{user-select:none}
+.cell[title]{cursor:pointer}
+
+
+/* Bảng phân ca: nhập trực tiếp, phân nhóm ngày và hàng nhân viên */
+#scheduleTable thead tr:nth-child(2) th{font-weight:900;color:#fff;border-bottom:3px solid #fff;padding:9px 4px}
+
+
+
+
+
+#scheduleTable thead tr:first-child th:not(.name):not(.total){border-right:4px solid #fff}
+#scheduleTable thead tr:nth-child(2) th:nth-child(5n){border-right:4px solid #fff}
+#scheduleTable tbody tr:nth-child(odd) td{background:#f1f6fc}
+#scheduleTable tbody tr:nth-child(even) td{background:#fff}
+#scheduleTable tbody tr:nth-child(odd) td.name{background:#e3edf9}
+#scheduleTable tbody tr:nth-child(even) td.name{background:#fff}
+#scheduleTable tbody td:nth-child(6n+6){border-right:4px solid #cbd8e8}
+#scheduleTable tbody tr:last-child td{background:#f7f0df}
+#scheduleTable .shift-cell{padding:3px;min-width:48px;border-bottom:1px solid #e3eaf2}
+#scheduleTable .cell-input{box-sizing:border-box;width:100%;min-width:42px;height:34px;border:1px solid transparent;border-radius:6px;text-align:center;font:800 12px Arial,sans-serif;outline:none;padding:4px 1px}
+#scheduleTable .cell-input.empty{background:#fff;color:#23364d;border:1px dashed #b7c5d6}
+#scheduleTable .cell-input.busy{background:#ef4444;color:#fff}
+#scheduleTable .cell-input.work{background:#e7f0ff;color:#174b91}
+#scheduleTable .cell-input.extra{background:#d8f4e8;color:#126344}
+#scheduleTable .cell-input:focus{border:2px solid #f59e0b;box-shadow:0 0 0 2px #f59e0b33}
+#scheduleTable .cell-input[readonly]{cursor:default}
+#scheduleTable tbody td.total{background:#edf3fb!important}
+
+
+/* NTH HR refreshed visual system */
+:root{--navy:#172235;--blue:#b58a4a;--pale:#f7f5f0;--line:#e7e2d9;--ink:#202a39;--muted:#7b8492}
+body{background:#f5f6f8}
+.sidebar{background:linear-gradient(160deg,#18263a 0%,#101827 100%);box-shadow:8px 0 32px #17223518}
+.brand{color:#e8c991}
+.main{padding:34px 36px}
+.title{font-size:30px;letter-spacing:-.7px}
+.card,.panel{border:1px solid #e9edf2;border-radius:17px;box-shadow:0 7px 24px rgba(22,34,53,.055)}
+.card{border-top:3px solid #c5a36b}
+.btn{border-radius:10px;transition:.18s ease}
+.btn:hover{box-shadow:0 5px 14px #17223516;transform:translateY(-1px)}
+.btn.primary{background:linear-gradient(135deg,#c09a5b,#98713b);border-color:#98713b}
+#scheduleTable{border-collapse:separate;border-spacing:0;background:#fff;border-radius:12px;overflow:hidden}
+#scheduleTable thead tr:nth-child(2) th{background:#eef1f5!important;color:#344258!important;border-bottom:2px solid #d9dfe8!important}
+#scheduleTable thead tr:first-child th{background:#e8e2d7!important;color:#39465a}
+#scheduleTable thead tr:first-child th:not(.name):not(.total){border-right:2px solid #fff}
+#scheduleTable thead tr:nth-child(2) th:nth-child(5n){border-right:2px solid #d6dce5}
+#scheduleTable tbody td:nth-child(6n+6){border-right:2px solid #d6dce5}
+#scheduleTable .cell-input{border-radius:8px;height:36px}
+#scheduleTable .cell-input.empty{background:#fafbfc;border:1px dashed #d4dbe5}
+#scheduleTable .cell-input.work{background:#edf2f8;color:#263f5c}
+#scheduleTable .cell-input.extra{background:#e7f3ed;color:#236348}
+#scheduleTable .cell-input.busy{background:#c95b5b;color:white}
+.authbox{border:1px solid #e7e2d9!important;border-radius:20px!important;box-shadow:0 18px 55px #17223520!important}
+.authbox input,.authbox select{border:1px solid #dfe4eb;border-radius:10px;padding:13px;background:#fbfcfd}
+@media(max-width:900px){.main{margin-left:0;padding:18px}.sidebar{position:relative;width:auto;height:auto}.cards{grid-template-columns:repeat(2,minmax(130px,1fr))}}
+
+
+#nthToast{position:fixed;right:24px;top:24px;z-index:99999;display:flex;align-items:center;gap:12px;min-width:280px;max-width:min(440px,calc(100vw - 32px));padding:15px 16px;border-radius:15px;background:#17263b;color:#fff;box-shadow:0 16px 44px #101d3240;opacity:0;transform:translateY(-12px);pointer-events:none;transition:.22s}
+#nthToast.show{opacity:1;transform:translateY(0);pointer-events:auto}
+#nthToast b{display:block;font-size:14px;margin-bottom:3px;color:#f2d8a9}
+#nthToast div div{font-size:13px;color:#e6edf5}
+#nthToast .nth-toast-icon{width:32px;height:32px;display:grid;place-items:center;border-radius:50%;background:#2d8a65;color:#fff;font-weight:900}
+#nthToast button{margin-left:auto;border:0;background:transparent;color:#dce5ef;font-size:20px;cursor:pointer}
+
+
+/* New NTH HR interface: light workspace sidebar */
+:root{--navy:#243247;--blue:#98723d;--pale:#f4f6f9;--line:#e5e9ef;--ink:#202b3b;--muted:#778397}
+body{background:#f3f5f8;color:#202b3b}
+.sidebar{
+ background:#fff!important;color:#263449!important;
+ border-right:1px solid #e6eaf0;box-shadow:5px 0 26px rgba(30,45,68,.045)!important;
+ padding:24px 15px!important;width:258px!important
+}
+.brand{color:#263449!important;font-size:21px!important;letter-spacing:1.4px;padding:5px 12px 28px!important}
+.brand small{color:#8792a2!important}
+.nav{gap:6px!important}
+.nav button{
+ color:#59677b!important;border:1px solid transparent!important;
+ border-radius:11px!important;padding:12px 13px!important;font-weight:650!important;
+ transition:background .18s,border-color .18s,color .18s
+}
+.nav button:hover{background:#f4f6f9!important;color:#243247!important;border-left:0!important}
+.nav button.active{
+ background:#f4eee3!important;color:#805f30!important;border:1px solid #eadcc4!important;
+ border-left:1px solid #eadcc4!important;box-shadow:inset 3px 0 #b58a4a
+}
+.main{margin-left:258px!important;padding:34px 38px!important}
+.top{padding:4px 0 20px;border-bottom:1px solid #e7ebf1}
+.eyebrow{color:#9a7642!important;letter-spacing:1.4px}
+.title{color:#202d40!important}
+.card,.panel{background:#fff;border:1px solid #e7ebf1!important;border-radius:18px!important;box-shadow:0 8px 28px rgba(32,48,72,.055)!important}
+.card{border-top:3px solid #c3a16b!important}
+.btn{border-radius:11px!important}
+.btn.primary{background:linear-gradient(135deg,#b9955d,#8e6c3d)!important;border-color:#98723d!important}
+.tablewrap{border:1px solid #e7ebf1;border-radius:14px;background:#fff}
+@media(max-width:900px){
+ .sidebar{position:relative!important;width:auto!important;inset:auto!important;padding:12px!important}
+ .brand{padding:8px 10px 14px!important}
+ .nav{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .main{margin-left:0!important;padding:18px!important}
+}
+
+
+/* PREMIUM DARK SIDEBAR — HR Nguyễn Tuấn Hảo */
+.sidebar{
+ background:
+  radial-gradient(ellipse at 12% 0%,rgba(181,138,74,.18),transparent 36%),
+  linear-gradient(160deg,#171b22 0%,#10151d 52%,#0b1017 100%)!important;
+ color:#f7f2e8!important;
+ border-right:1px solid rgba(202,169,112,.24);
+ box-shadow:10px 0 35px rgba(8,12,18,.18)!important;
+ padding:30px 16px!important;
+}
+.brand{
+ display:block;
+ color:#e8c995!important;
+ font-size:18px!important;
+ line-height:1.35;
+ letter-spacing:.5px!important;
+ padding:13px 12px 25px!important;
+ margin:0 0 19px;
+ border-bottom:1px solid rgba(205,173,119,.24);
+ text-shadow:0 2px 14px rgba(199,157,88,.15);
+}
+.brand small{
+ color:#a8a093!important;
+ font-size:9px!important;
+ letter-spacing:2px;
+ margin-top:7px!important;
+}
+.nav{gap:6px!important}
+.nav button{
+ position:relative;
+ color:#c5c9cf!important;
+ background:transparent!important;
+ border:1px solid transparent!important;
+ border-left:3px solid transparent!important;
+ border-radius:9px!important;
+ padding:12px 12px!important;
+ font-weight:600;
+ letter-spacing:.1px;
+ transition:background .18s ease,border-color .18s ease,color .18s ease,transform .18s ease;
+}
+.nav button:hover{
+ color:#f5dfb8!important;
+ background:rgba(196,157,94,.10)!important;
+ border-color:rgba(196,157,94,.12)!important;
+ transform:translateX(2px);
+}
+.nav button.active{
+ color:#f1d6a8!important;
+ background:linear-gradient(100deg,rgba(181,138,74,.22),rgba(181,138,74,.07))!important;
+ border:1px solid rgba(196,157,94,.22)!important;
+ border-left:3px solid #c8a46b!important;
+ box-shadow:inset 0 1px 0 rgba(255,255,255,.035),0 5px 16px rgba(0,0,0,.12);
+}
+.authbrand{
+ color:#242a34!important;
+ font-size:20px!important;
+ letter-spacing:1px!important;
+ line-height:1.35;
+}
+@media(max-width:850px){
+ .sidebar{background:linear-gradient(120deg,#171b22,#0b1017)!important}
+ .brand{padding:5px 8px 12px!important;margin-bottom:10px}
+ .nav button.active{box-shadow:inset 0 -2px 0 #c8a46b}
+}
+
+</style>
+</head>
+<body>
+<div class="authveil" id="authVeil">
+ <div class="authbox">
+  <div class="authbrand">HR <span style="color:#b58a4a">NGUYỄN TUẤN HẢO</span></div>
+  <h2>Đăng nhập hệ thống</h2>
+  <p>Chọn quyền truy cập để tiếp tục sử dụng HR Nguyễn Tuấn Hảo.</p>
+  <label>Loại tài khoản<select id="loginRole" onchange="toggleLoginFields()"><option value="employee">Nhân viên</option><option value="admin">Quản lý</option></select></label>
+  <label id="loginNameWrap">Tên nhân viên<select id="loginName"></select></label>
+  <label id="employeePassWrap">Mật khẩu cá nhân<input id="employeePass" type="password" placeholder="Mật khẩu do quản lý cấp"></label>
+  <label id="loginPinWrap" class="hidden">Mã quản lý<input id="loginPin" type="password" placeholder="Nhập mã quản lý"></label>
+  <button class="btn primary" onclick="login()">Đăng nhập</button>
+  <div class="footnote">Nhân viên đăng nhập bằng mật khẩu riêng do quản lý cài. Bản HTML thử nghiệm lưu dữ liệu trong trình duyệt, chưa phải bảo mật máy chủ.</div>
+ </div>
+</div>
+<aside class="sidebar">
+ <div class="brand">HR Nguyễn Tuấn Hảo <small>HUMAN RESOURCE MANAGEMENT</small></div>
+ <div class="nav">
+  <button class="active" data-page="schedule">▦　Lịch phân ca</button>
+  <button data-page="myPay" class="employee-only">＄　Giờ công & lương của tôi</button>
+  <button data-page="requests">⇄　Đổi ca & nghỉ phép</button>
+  <button data-page="staff">♙　Nhân viên</button>
+  <button data-page="reports">▤　Báo cáo công</button>
+<button data-page="payroll" class="admin-only">＄　Tính lương tổng</button>
+ </div>
+</aside>
+<main class="main">
+ <div class="top"><div><div class="eyebrow">Quản trị nhân sự</div><div class="title" id="pageTitle">Lịch phân ca làm việc</div><div class="sub">Không gian quản trị nhân sự · phân quyền quản lý và nhân viên · một chi nhánh</div></div><div class="controls"><span class="rolebar" id="roleLabel">Chưa đăng nhập</span><button class="btn" onclick="logout()">Đăng xuất</button><button class="btn" onclick="window.print()">In lịch</button><button class="btn primary admin-only" onclick="exportCSV()">Xuất Excel (CSV)</button></div></div>
+ <section id="schedule" class="section active">
+  <div class="cards">
+   <div class="card"><div class="label">Nhân viên trong danh sách</div><div class="num" id="staffCount">7</div><div class="hint">Nhân sự của chi nhánh</div></div>
+   <div class="card"><div class="label">Ca đã phân</div><div class="num" id="assignedCount">0</div><div class="hint">Tổng ô có lịch làm</div></div>
+   <div class="card"><div class="label">Khung giờ thiếu người</div><div class="num" id="understaffed">0</div><div class="hint">Theo ngưỡng tối thiểu 2 người</div></div>
+   <div class="card"><div class="label">Tổng giờ đã xếp</div><div class="num" id="totalHours">0</div><div class="hint">Chưa trừ thời gian nghỉ giữa ca</div></div>
+  </div>
+  <div class="panel">
+   <div class="toolbar"><h2>Lịch làm việc theo tuần</h2><div class="controls"><button class="btn" onclick="shiftWeek(-7)">← Tuần trước</button><input type="date" id="weekDate"><button class="btn" onclick="shiftWeek(7)">Tuần sau →</button><button class="btn admin-only" onclick="addStaff()">+ Thêm nhân viên</button></div></div>
+   <div class="legend"><span><i class="dot busy"></i>Đỏ: Nhân viên báo bận</span><span><i class="dot work"></i>X: Làm theo ca</span><span><i class="dot" style="background:#d8f4e8"></i>X+1 / X+2: Làm thêm giờ</span><span><i class="dot empty"></i>Trống: Chưa phân lịch</span></div>
+   <div class="tablewrap"><table id="scheduleTable"></table></div>
+   <div class="footnote">Quản lý nhập trực tiếp vào ô trống: B = Bận, X = làm ca, X+1 / X+2 = làm thêm giờ. Xóa ca chỉ cần xóa nội dung trong ô. Cột cuối là tổng giờ công dự kiến trong tuần.</div>
+   <div class="monthly-box"><h3>Tổng giờ công từ đầu tháng đến hiện tại</h3><div class="sub" id="monthLabel"></div><div class="tablewrap"><table id="monthlyTable"></table></div><div class="footnote">Tính theo các ca đã được xếp từ ngày đầu tháng đến hôm nay, bao gồm phần X+1 / X+2. Giờ lương tính theo ca đã xếp và X+1/X+2.</div></div>
+  </div>
+ </section>
+ <section id="myPay" class="section employee-only">
+  <div class="panel">
+   <div class="toolbar"><div><h2>Giờ công & lương của tôi</h2><div class="sub" id="myPayPeriod">Từ đầu tháng đến hôm nay</div></div><button class="btn" onclick="renderMyPay()">Cập nhật</button></div>
+   <div class="cards">
+    <div class="card"><div class="label">Giờ công đến hiện tại</div><div class="num" id="myHours">0</div><div class="hint">Theo lịch đã phân và hỗ trợ được duyệt</div></div>
+    <div class="card"><div class="label">Lương dự kiến đến hiện tại</div><div class="num" id="mySalary">0 đ</div><div class="hint">Không tự trừ do đi trễ/về sớm</div></div>
+   </div>
+   <div class="tablewrap"><table id="myPayTable"></table></div>
+   <div class="footnote">Chỉ hiển thị dữ liệu của tài khoản đang đăng nhập. Đây là số lũy kế từ đầu tháng đến hôm nay, không phải tổng lương cả tháng.</div>
+  </div>
+ </section>
+ <section id="requests" class="section">
+  <div class="panel">
+   <div class="toolbar"><h2>Nhờ làm thay một phần ca</h2><span class="sub">Hỗ trợ 1–2 tiếng hoặc một khoảng giờ bất kỳ</span></div>
+   <div class="formgrid">
+    <label>Người nhờ hỗ trợ<select id="partEmployee"></select></label>
+    <label>Ngày<input type="date" id="partDate"></label>
+    <label>Người nhận làm thay<select id="partHelper"></select></label>
+    <label>Giờ bắt đầu<input type="time" id="partStart" value="10:00"></label>
+    <label>Giờ kết thúc<input type="time" id="partEnd" value="12:00"></label>
+    <label style="grid-column:span 2">Lý do / ghi chú<input id="partReason" placeholder="Ví dụ: Có việc cá nhân, nhờ hỗ trợ 2 tiếng"></label>
+    <label style="align-self:end"><button class="btn primary" onclick="submitPartial()">Gửi yêu cầu nhờ làm thay</button></label>
+   </div>
+   <div class="footnote">Người nhận cần đồng ý, sau đó quản lý duyệt. Chỉ khi được duyệt, hệ thống mới điều chỉnh giờ công. Yêu cầu chưa duyệt không làm thay đổi công.</div>
+  </div>
+  <div class="panel">
+   <div class="toolbar"><h2>Gửi yêu cầu đổi ca</h2><span class="sub">Nhân viên chọn ca muốn đổi · Quản lý xác nhận</span></div>
+   <div class="formgrid">
+    <label>Nhân viên gửi yêu cầu<select id="reqEmployee"></select></label>
+    <label>Ngày đổi ca<input type="date" id="reqDate"></label>
+    <label>Ca hiện tại<select id="reqFrom"></select></label>
+    <label>Ca muốn đổi sang<select id="reqTo"></select></label>
+    <label>Đổi với nhân viên (nếu có)<select id="reqPartner"></select></label>
+    <label style="grid-column:span 2">Lý do / ghi chú<input id="reqReason" placeholder="Nhập lý do đổi ca"></label>
+    <label style="align-self:end"><button class="btn primary" onclick="submitRequest()">Gửi yêu cầu đổi ca</button></label>
+   </div>
+   <div class="footnote">Nếu chọn nhân viên đổi cùng, khi quản lý duyệt hệ thống sẽ hoán đổi ca giữa hai người. Nếu chọn “Không đổi trực tiếp”, hệ thống chuyển ca của nhân viên sang khung giờ mới sau khi duyệt.</div>
+  </div>
+  <div class="panel">
+   <div class="toolbar"><h2>Danh sách yêu cầu chờ xác nhận</h2><button class="btn" onclick="renderRequests()">Làm mới</button></div>
+   <div class="tablewrap"><table id="requestsTable"></table></div>
+  </div>
+ </section>
+ <section id="staff" class="section"><div class="panel"><h2>Danh sách nhân viên</h2><div id="staffList"></div><button class="btn primary" onclick="addStaff()">+ Thêm nhân viên</button></div></section>
+ 
+<section id="payroll" class="section">
+ <div class="panel">
+  <div class="toolbar">
+   <div><h2>Bảng tính lương nhân viên</h2><div class="sub">Thiết lập mức lương riêng cho từng nhân viên và tính theo tháng.</div></div>
+   <div class="controls"><label>Tháng tính lương <input type="month" id="payrollMonth" onchange="renderPayroll()"></label><button class="btn" onclick="renderPayroll()">Tính lại</button></div>
+  </div>
+  <div class="footnote">Tất cả nhân viên tính lương theo giờ; mỗi người có đơn giá giờ riêng. Hệ thống tính giờ theo lịch đã xếp, giờ làm thêm X+1/X+2, giờ hỗ trợ làm thay đã duyệt, phụ cấp, khấu trừ và tạm ứng. Đây là lương dự kiến theo lịch, chưa phải bảng công thực tế đã xác nhận.</div>
+  <div class="tablewrap"><table id="payrollTable"></table></div>
+ </div>
+ <div class="panel">
+  <h2>Công thức</h2>
+  <p class="sub">Lương giờ = giờ thường × đơn giá giờ + giờ tăng ca × đơn giá giờ × hệ số OT + phụ cấp − khấu trừ − tạm ứng.</p>
+  <p class="sub">Lương dự kiến = tổng giờ công × đơn giá giờ + tiền tăng ca + phụ cấp − khấu trừ − tạm ứng.</p>
+  <p class="sub">Mỗi nhân viên có cấu hình riêng; có thể sửa bất cứ lúc nào.</p>
+ </div>
+</section>
+<section id="reports" class="section"><div class="panel"><h2>Báo cáo công</h2><p>Bảng phân ca hiện tính tổng giờ dự kiến theo từng nhân viên. Báo cáo công thực tế cần đồng bộ dữ liệu chấm công.</p><div id="reportList"></div></div></section>
+</main>
+<script>
+const slots=['08–12','12–16','16–22','10–14','18–23'];
+let staff=['Nguyễn Thanh Bình','Trần Vương Khánh Linh','Nguyễn Thái Yến Nhi','Nguyễn Văn Đức','Đoàn Hữu Lộc','Nguyễn Lý Bình Kiên','Nguyễn Duy Quang Huy'];
+let weekStart=new Date();weekStart.setDate(weekStart.getDate()-((weekStart.getDay()+6)%7));weekStart.setHours(0,0,0,0);
+let data={};
+const key=(d,s,i)=>`${d}_${s}_${i}`;
+function dateKey(d){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
+function state(d,s,i){return data[key(d,s,i)]||''}
+function setState(d,s,i,v){const k=key(d,s,i);if(v)data[k]=v;else delete data[k];save();render()}
+function save(){localStorage.setItem('ctc_hr_demo',JSON.stringify({staff,data,week:dateKey(weekStart)}))}
+function load(){try{let x=JSON.parse(localStorage.getItem('ctc_hr_demo'));if(x){staff=x.staff||staff;data=x.data||{};if(x.week)weekStart=new Date(x.week+'T00:00:00')}attendance=JSON.parse(localStorage.getItem('ctc_hr_attendance')||'{}');requests=JSON.parse(localStorage.getItem('ctc_hr_requests')||'[]')}catch(e){}}
+function fmt(d){return d.toLocaleDateString('vi-VN',{day:'2-digit',month:'2-digit'})}
+function hours(v,s){if(!v||v==='B')return 0;let base=[4,4,6,4,5][s];return base+(v==='X+1'?1:v==='X+2'?2:0)}
+function render(){
+ const table=document.getElementById('scheduleTable');let h='<thead><tr><th class="name" rowspan="2">HỌ VÀ TÊN</th>';
+ for(let d=0;d<7;d++){let dt=new Date(weekStart);dt.setDate(dt.getDate()+d);let wd=['CHỦ NHẬT','THỨ 2','THỨ 3','THỨ 4','THỨ 5','THỨ 6','THỨ 7'][dt.getDay()];let weekend=dt.getDay()===0||dt.getDay()===6;h+=`<th colspan="5"><div class="dayhead ${weekend?'weekend':''}"><span class="weekday">${wd}</span><span class="date">${fmt(dt)}</span></div></th>`}h+='<th class="total" rowspan="2">TỔNG GIỜ CÔNG TUẦN</th></tr><tr>';
+ for(let d=0;d<7;d++)for(let s=0;s<5;s++)h+=`<th class="${s===4?'day-end':''}">${slots[s]}</th>`;h+='</tr></thead><tbody>';
+ let assigned=0,total=0,under=0;
+ staff.forEach((name,i)=>{let sum=0;h+=`<tr><td class="name">${escapeHtml(name)}</td>`;
+ for(let d=0;d<7;d++)for(let s=0;s<5;s++){let dt=new Date(weekStart);dt.setDate(dt.getDate()+d);let v=state(dateKey(dt),s,i);let label=v==='B'?'BẬN':v||'·';let cls=v==='B'?'busy':v?'work':'empty';if(v==='X+1'||v==='X+2')cls='extra';sum+=hours(v,s);if(v&&v!=='B')assigned++;h+=`<td class="shift-cell ${s===4?'day-end':''}"><input class="cell-input ${cls}"  aria-label="${escapeHtml(name)} ${dateKey(dt)} ca ${slots[s]}" value="${v}" placeholder="" ${currentRole==='admin'?`onchange="saveShiftInput('${dateKey(dt)}',${s},${i},this)" onkeydown="if(event.key==='Enter'){this.blur()}"`:'readonly'}></td>`}
+ sum+=partialAdjustment(i,dateKey(weekStart),dateKey(new Date(weekStart.getFullYear(),weekStart.getMonth(),weekStart.getDate()+6)));
+ total+=sum;h+=`<td class="total">${sum}</td></tr>`});
+ h+='<tr><td class="name">NHÂN SỰ / KHUNG GIỜ</td>';for(let d=0;d<7;d++)for(let s=0;s<5;s++){let dt=new Date(weekStart);dt.setDate(dt.getDate()+d);let n=staff.filter((_,i)=>{let v=state(dateKey(dt),s,i);return v&&v!=='B'}).length;if(n<2)under++;h+=`<td class="coverage ${n>=2?'good':''}">${n}</td>`}h+='<td class="total">—</td></tr></tbody>';
+ table.innerHTML=h;
+ document.getElementById('staffCount').textContent=staff.length;document.getElementById('assignedCount').textContent=assigned;document.getElementById('understaffed').textContent=under;document.getElementById('totalHours').textContent=total;
+ document.getElementById('weekDate').value=dateKey(weekStart);
+ renderMonthly();
+ populateRequestForm();
+
+ document.getElementById('staffList').innerHTML=staff.map((n,i)=>`<p>${i+1}. ${escapeHtml(n)} <button class="btn" onclick="renameStaff(${i})">Sửa tên</button> <button class="btn" onclick="removeStaff(${i})">Xóa</button> <button class="btn primary" onclick="setEmployeePassword(${i})">Cài mật khẩu</button></p>`).join('');
+ document.getElementById('reportList').innerHTML=staff.map((n,i)=>{let sum=0;Object.keys(data).forEach(k=>{let a=k.split('_');if(+a[2]===i)sum+=hours(data[k],+a[1])});return `<p><b>${escapeHtml(n)}</b>: ${sum} giờ đã xếp trong dữ liệu hiện tại</p>`}).join('');
+}
+
+
+function monthStartDate(){const n=new Date();return new Date(n.getFullYear(),n.getMonth(),1)}
+function renderMonthly(){
+ const start=monthStartDate(), today=new Date();today.setHours(0,0,0,0);
+ document.getElementById('monthLabel').textContent=`${fmt(start)} – ${fmt(today)} (${today.toLocaleDateString('vi-VN',{month:'long',year:'numeric'})})`;
+ let h='<thead><tr><th class="name">Nhân viên</th><th>Tổng giờ công tháng đến hiện tại</th></tr></thead><tbody>';
+ staff.forEach((name,i)=>{let sum=0;for(let d=new Date(start);d<=today;d.setDate(d.getDate()+1)){const dk=dateKey(d);for(let s=0;s<5;s++)sum+=hours(state(dk,s,i),s)}sum+=partialAdjustment(i,dateKey(start),dateKey(today));h+=`<tr><td class="name">${escapeHtml(name)}</td><td><b>${sum} giờ</b></td></tr>`});
+ document.getElementById('monthlyTable').innerHTML=h+'</tbody>';
+}
+function populateRequestForm(){
+ const emp=document.getElementById('reqEmployee'), partner=document.getElementById('reqPartner');
+ if(!emp||!partner)return;
+ const keep=emp.value, keepP=partner.value;
+ emp.innerHTML=staff.map((n,i)=>`<option value="${i}">${escapeHtml(n)}</option>`).join('');
+ partner.innerHTML='<option value="">Không đổi trực tiếp</option>'+staff.map((n,i)=>`<option value="${i}">${escapeHtml(n)}</option>`).join('');
+ if(keep!==''&&+keep<staff.length)emp.value=keep;
+ if(keepP!==''&&+keepP<staff.length)partner.value=keepP;
+ const opts=slots.map((s,i)=>`<option value="${i}">${s}</option>`).join('');
+ document.getElementById('reqFrom').innerHTML=opts;document.getElementById('reqTo').innerHTML=opts;
+ if(!document.getElementById('reqDate').value)document.getElementById('reqDate').value=dateKey(new Date());
+ renderRequests();
+ const pe=document.getElementById('partEmployee'), ph=document.getElementById('partHelper');
+ if(pe&&ph){const opts2=staff.map((n,i)=>`<option value="${i}">${escapeHtml(n)}</option>`).join('');pe.innerHTML=opts2;ph.innerHTML=opts2;if(!document.getElementById('partDate').value)document.getElementById('partDate').value=dateKey(new Date());}
+}
+
+function partialAdjustment(employee,fromDate,toDate){
+ let delta=0;
+ requests.filter(r=>r.kind==='partial'&&r.status==='approved'&&r.date>=fromDate&&r.date<=toDate).forEach(r=>{
+  const mins=t=>{const [h,m]=t.split(':').map(Number);return h*60+m};
+  const hrs=(mins(r.end)-mins(r.start))/60;
+  if(r.employee===employee)delta-=hrs;
+  if(r.helper===employee)delta+=hrs;
+ });
+ return Math.round(delta*100)/100;
+}
+function submitPartial(){
+ const employee=currentRole==='employee'?currentEmployee:+document.getElementById('partEmployee').value, helper=+document.getElementById('partHelper').value;
+ const date=document.getElementById('partDate').value,start=document.getElementById('partStart').value,end=document.getElementById('partEnd').value;
+ const reason=document.getElementById('partReason').value.trim();
+ if(!date||!start||!end){alert('Vui lòng chọn đầy đủ thông tin.');return}
+ if(employee===helper){alert('Người nhờ và người làm thay phải là hai nhân viên khác nhau.');return}
+ const [sh,sm]=start.split(':').map(Number),[eh,em]=end.split(':').map(Number);
+ if(eh*60+em<=sh*60+sm){alert('Giờ kết thúc phải sau giờ bắt đầu.');return}
+ requests.push({id:Date.now(),kind:'partial',employee,helper,date,start,end,reason,status:'pending',created:new Date().toISOString()});
+ localStorage.setItem('ctc_hr_requests',JSON.stringify(requests));
+ document.getElementById('partReason').value='';renderRequests();
+ alert('Đã gửi yêu cầu nhờ làm thay. Chờ người nhận xác nhận và quản lý duyệt.');
+}
+
+function submitRequest(){
+ const employee=currentRole==='employee'?currentEmployee:+document.getElementById('reqEmployee').value, date=document.getElementById('reqDate').value;
+ const from=+document.getElementById('reqFrom').value, to=+document.getElementById('reqTo').value;
+ const partnerVal=document.getElementById('reqPartner').value;
+ const partner=partnerVal===''?null:+partnerVal, reason=document.getElementById('reqReason').value.trim();
+ if(!date||!Number.isInteger(employee)||!Number.isInteger(from)||!Number.isInteger(to)){alert('Vui lòng chọn đầy đủ nhân viên, ngày và ca.');return}
+ if(from===to){alert('Ca hiện tại và ca muốn đổi đang giống nhau.');return}
+ if(partner===employee){alert('Nhân viên không thể đổi ca với chính mình.');return}
+ requests.push({id:Date.now(),employee,date,from,to,partner,reason,status:'pending',created:new Date().toISOString()});
+ localStorage.setItem('ctc_hr_requests',JSON.stringify(requests));
+ document.getElementById('reqReason').value='';renderRequests();alert('Đã gửi yêu cầu. Yêu cầu đang chờ quản lý xác nhận.');
+}
+function renderRequests(){
+ const table=document.getElementById('requestsTable');if(!table)return;
+ let h='<thead><tr><th>Loại yêu cầu</th><th>Nhân viên</th><th>Ngày</th><th>Ca / thời gian</th><th>Người nhận</th><th>Lý do</th><th>Trạng thái</th><th>Xử lý</th></tr></thead><tbody>';
+ if(!requests.length)h+='<tr><td colspan="8" class="empty-state">Chưa có yêu cầu đổi ca hoặc nhờ làm thay.</td></tr>';
+ requests.slice().reverse().forEach(r=>{
+  const partial=r.kind==='partial';
+  const status=r.status==='approved'?'Đã duyệt':r.status==='rejected'?'Từ chối':r.status==='accepted'?'Người nhận đã đồng ý':'Chờ người nhận';
+  const timing=partial?`${r.start}–${r.end}`:`${slots[r.from]} → ${slots[r.to]}`;
+  const recipient=partial?(staff[r.helper]||'Không rõ'):(r.partner===null?'—':staff[r.partner]||'Không rõ');
+  let actions='—';
+  if(r.status==='pending'&&partial) actions=`<button class="btn primary smallbtn" onclick="acceptPartial(${r.id})">Xác nhận nhận ca</button><button class="btn smallbtn" onclick="processRequest(${r.id},'rejected')">Từ chối</button>`;
+  else if(r.status==='accepted') actions=`<button class="btn primary smallbtn" onclick="processRequest(${r.id},'approved')">Quản lý duyệt</button><button class="btn smallbtn" onclick="processRequest(${r.id},'rejected')">Từ chối</button>`;
+  else if(r.status==='pending') actions=`<button class="btn primary smallbtn" onclick="processRequest(${r.id},'approved')">Duyệt</button><button class="btn smallbtn" onclick="processRequest(${r.id},'rejected')">Từ chối</button>`;
+  h+=`<tr><td>${partial?'Nhờ làm thay':'Đổi ca'}</td><td>${escapeHtml(staff[r.employee]||'Không rõ')}</td><td>${r.date}</td><td>${timing}</td><td>${escapeHtml(recipient)}</td><td>${escapeHtml(r.reason||'—')}</td><td><span class="status-pill ${r.status==='approved'?'approved':r.status==='rejected'?'rejected':''}">${status}</span></td><td>${actions}</td></tr>`;
+ });
+ table.innerHTML=h+'</tbody>';
+}
+function acceptPartial(id){
+ const r=requests.find(x=>x.id===id);if(!r||r.kind!=='partial'||r.status!=='pending')return;
+ r.status='accepted';localStorage.setItem('ctc_hr_requests',JSON.stringify(requests));renderRequests();
+ alert('Người nhận đã xác nhận. Chuyển quản lý duyệt.');
+}
+function processRequest(id,decision){
+ if(currentRole!=='admin'){alert('Chỉ quản lý mới có quyền duyệt yêu cầu.');return}
+ const r=requests.find(x=>x.id===id);if(!r||r.status!=='pending')return;
+ if(decision==='approved'&&r.kind!=='partial'){
+  const k1=key(r.date,r.from,r.employee), k2=key(r.date,r.to,r.employee);
+  if(r.partner!==null){
+   const partnerOld=key(r.date,r.to,r.partner);
+   const v1=data[k1]||'X',v2=data[partnerOld]||'X';
+   data[k1]=v2;data[partnerOld]=v1;
+  }else{
+   const oldState=data[k1]||'X';delete data[k1];data[k2]=oldState;
+  }
+  save();render();
+ }
+ r.status=decision;localStorage.setItem('ctc_hr_requests',JSON.stringify(requests));renderRequests();render();renderMonthly();
+ alert(decision==='approved'?'Đã duyệt. Lịch phân ca đã được cập nhật.':'Đã từ chối yêu cầu đổi ca.');
+}
+
+let attendance={};
+let requests=[];
+
+function cleanupOldAttendance(){
+ const cutoff=new Date();cutoff.setMonth(cutoff.getMonth()-1);
+ let changed=false;
+ Object.keys(attendance).forEach(k=>{
+  const day=k.split('_')[0], d=new Date(day+'T00:00:00');
+  if(!isNaN(d)&&d<cutoff){delete attendance[k];changed=true;}
+ });
+ if(changed)localStorage.setItem('ctc_hr_attendance',JSON.stringify(attendance));
+}
+function renderAttendance(){
+ const date=document.getElementById('attendanceDate').value || dateKey(new Date());
+ document.getElementById('attendanceDate').value=date;
+ const statuses=['Chưa xác nhận','Đã check-in','Đã check-out','Nghỉ','Cần kiểm tra'];
+ const isAdmin=currentRole==='admin';
+ let h='<thead><tr><th class="name">Nhân viên</th>';
+ if(isAdmin)h+='<th>Trạng thái</th><th>Giờ check-in</th><th>Giờ check-out</th><th>Ghi chú / đối chiếu nhóm</th>';
+ h+='<th>Ảnh check-in</th><th>Ảnh check-out</th></tr></thead><tbody>';
+ const indices=isAdmin?staff.map((_,i)=>i):(currentEmployee>=0?[currentEmployee]:[]);
+ indices.forEach(i=>{
+  const name=staff[i]; if(!name)return;
+  const k=date+'_'+i, a=attendance[k]||{status:statuses[0],in:'',out:'',note:''};
+  h+=`<tr><td class="name">${escapeHtml(name)}</td>`;
+  if(isAdmin){
+   h+=`<td><select onchange="updateAttendance('${k}','status',this.value)">${statuses.map(s=>`<option ${a.status===s?'selected':''}>${s}</option>`).join('')}</select></td>
+   <td><input type="time" value="${a.in||''}" onchange="updateAttendance('${k}','in',this.value)"></td>
+   <td><input type="time" value="${a.out||''}" onchange="updateAttendance('${k}','out',this.value)"></td>
+   <td><input style="min-width:210px" placeholder="Ghi chú đối chiếu" value="${escapeHtml(a.note||'')}" onchange="updateAttendance('${k}','note',this.value)"></td>`;
+  }
+  ['in','out'].forEach(kind=>{
+   const label=kind==='in'?'check-in':'check-out';
+   const preview=a[kind+'Photo']?`<img class="photo-preview" src="${a[kind+'Photo']}" alt="Ảnh ${label}">`:'<span class="sub">Chưa có ảnh</span>';
+   h+=`<td class="photo-cell">${preview}${!isAdmin?`<label class="photo-upload">Tải ảnh ${label}<input type="file" accept="image/*" capture="environment" onchange="uploadAttendancePhoto('${date}',${i},'${kind}',this)"></label>`:''}</td>`;
+  });
+  h+='</tr>';
+ });
+ if(!indices.length)h+='<tr><td colspan="3" class="empty-state">Chưa chọn nhân viên.</td></tr>';
+ document.getElementById('attendanceTable').innerHTML=h+'</tbody>';
+}
+function updateAttendance(k,field,value){
+ if(currentRole!=='admin')return;
+ attendance[k]=attendance[k]||{status:'Chưa xác nhận',in:'',out:'',note:''};
+ attendance[k][field]=value;localStorage.setItem('ctc_hr_attendance',JSON.stringify(attendance));
+}
+function uploadAttendancePhoto(date,index,kind,input){
+ if(currentRole!=='admin'&&index!==currentEmployee){alert('Bạn chỉ có thể tải ảnh chấm công của chính mình.');input.value='';return;}
+ const file=input.files&&input.files[0];if(!file)return;
+ if(!file.type.startsWith('image/')){alert('Vui lòng chọn tệp hình ảnh.');input.value='';return;}
+ const reader=new FileReader();
+ reader.onload=()=>{
+  const img=new Image();
+  img.onload=()=>{
+   const max=1000, scale=Math.min(1,max/Math.max(img.width,img.height));
+   const canvas=document.createElement('canvas');
+   canvas.width=Math.round(img.width*scale);canvas.height=Math.round(img.height*scale);
+   canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
+   const compressed=canvas.toDataURL('image/jpeg',0.72);
+   const k=date+'_'+index;
+   attendance[k]=attendance[k]||{status:'Chưa xác nhận',in:'',out:'',note:''};
+   const submittedAt=new Date();
+   attendance[k][kind+'Photo']=compressed;
+   attendance[k][kind+'PhotoAt']=submittedAt.toISOString();
+   // Ghi nhận giờ theo thời điểm nhân viên tải ảnh lên.
+   const hh=String(submittedAt.getHours()).padStart(2,'0');
+   const mm=String(submittedAt.getMinutes()).padStart(2,'0');
+   attendance[k][kind]=hh+':'+mm;
+   // Tự xác nhận khi đã có đủ ảnh vào và ảnh ra.
+   // Giờ trễ/về sớm chỉ để quản lý kiểm tra, không làm giảm giờ tính lương.
+   if(attendance[k].inPhoto && attendance[k].outPhoto){
+    attendance[k].status='Đã check-out';
+    attendance[k].autoConfirmedAt=new Date().toISOString();
+   }else if(kind==='in'){
+    attendance[k].status='Đã check-in';
+   }
+   try{
+    localStorage.setItem('ctc_hr_attendance',JSON.stringify(attendance));
+    renderAttendance();
+    const done=kind==='in'?'Check-in thành công!':'Check-out thành công!';
+    const detail='Đã ghi nhận lúc '+hh+':'+mm+(attendance[k].status==='Đã check-out'?' · Đã đủ ảnh vào/ra, công được tự xác nhận.':'.');
+    nthSound(kind);nthNotify(done,detail,kind);
+   }catch(e){alert('Ảnh quá lớn hoặc bộ nhớ trình duyệt đã đầy. Hãy chọn ảnh khác dung lượng nhỏ hơn.');}
+  };
+  img.onerror=()=>alert('Không đọc được ảnh. Vui lòng thử lại.');
+  img.src=reader.result;
+ };
+ reader.readAsDataURL(file);
+}
+
+
+function saveShiftInput(d,s,i,input){
+ if(currentRole!=='admin'){input.value=state(d,s,i);input.setAttribute('readonly','');return;}
+ const value=input.value.trim().toUpperCase();
+ if(!['','B','X','X+1','X+2'].includes(value)){
+  alert('Chỉ nhập B, X, X+1, X+2 hoặc để trống.');
+  input.value=state(d,s,i);
+  return;
+ }
+ const k=key(d,s,i);
+ if(value)data[k]=value;else delete data[k];
+ save();
+ render();
+}
+
+function editShift(d,s,i){
+ if(currentRole!=='admin')return;
+ const current=state(d,s,i);
+ const raw=prompt('Nhập mã ca cho '+staff[i]+' ngày '+d+'\\n\\nĐể trống = xóa ca\\nB = Bận\\nX = Làm ca\\nX+1 = Làm thêm 1 giờ\\nX+2 = Làm thêm 2 giờ',current);
+ if(raw===null)return;
+ const value=raw.trim().toUpperCase();
+ if(!['','B','X','X+1','X+2'].includes(value)){alert('Mã không hợp lệ. Chỉ nhập: B, X, X+1, X+2 hoặc để trống để xóa.');return;}
+ setState(d,s,i,value);
+}
+function clearShift(event,d,s,i){
+ event.preventDefault();
+ if(currentRole!=='admin')return;
+ if(!state(d,s,i))return;
+ setState(d,s,i,'');
+}
+function shiftWeek(n){weekStart.setDate(weekStart.getDate()+n);render()}
+document.getElementById('weekDate').addEventListener('change',e=>{let d=new Date(e.target.value+'T00:00:00');weekStart=new Date(d);weekStart.setDate(weekStart.getDate()-((weekStart.getDay()+6)%7));render()});
+function addStaff(){if(currentRole!=='admin')return;let n=prompt('Nhập họ và tên nhân viên:');if(n&&n.trim()){staff.push(n.trim());save();render()}}
+function renameStaff(i){if(currentRole!=='admin')return;let n=prompt('Sửa họ và tên:',staff[i]);if(n&&n.trim()){staff[i]=n.trim();save();render()}}
+function removeStaff(i){if(currentRole!=='admin')return;if(confirm('Xóa nhân viên khỏi danh sách?')){staff.splice(i,1);let nd={};Object.entries(data).forEach(([k,v])=>{let a=k.split('_');let idx=+a[2];if(idx<i)nd[k]=v;else if(idx>i)nd[`${a[0]}_${a[1]}_${idx-1}`]=v});data=nd;save();render()}}
+function exportCSV(){let rows=[['Nhân viên',...Array.from({length:7},(_,d)=>{let dt=new Date(weekStart);dt.setDate(dt.getDate()+d);return fmt(dt)}),'Tổng giờ công tuần']];staff.forEach((n,i)=>{let r=[n],sum=0;for(let d=0;d<7;d++){let dt=new Date(weekStart);dt.setDate(dt.getDate()+d);let a=[];for(let s=0;s<5;s++){let v=state(dateKey(dt),s,i)||'';a.push(v);sum+=hours(v,s)}r.push(a.join(' | '))}r.push(sum);rows.push(r)});let csv='\ufeff'+rows.map(r=>r.map(x=>'"'+String(x).replaceAll('"','""')+'"').join(',')).join('\n');let a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download='lich-phan-ca-nth-hr.csv';a.click();URL.revokeObjectURL(a.href)}
+
+let payrollSettings={};
+function loadPayrollSettings(){try{payrollSettings=JSON.parse(localStorage.getItem('nth_hr_payroll_settings')||'{}')||{};}catch(e){payrollSettings={};}}
+function savePayrollSettings(){localStorage.setItem('nth_hr_payroll_settings',JSON.stringify(payrollSettings));}
+function payrollSetting(name){return payrollSettings[name]||{hourlyRate:25000,otMultiplier:1.5,allowance:0,deduction:0,advance:0};}
+function updatePayrollSetting(name,field,value){
+ const s=payrollSetting(name);
+ if(field==='type')s[field]=value;else s[field]=Math.max(0,Number(value)||0);
+ payrollSettings[name]=s;savePayrollSettings();renderPayroll();
+}
+function renderPayroll(){
+ const table=document.getElementById('payrollTable');if(!table)return;
+ const monthInput=document.getElementById('payrollMonth');
+ if(!monthInput.value){const n=new Date();monthInput.value=`${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}`;}
+ const [yy,mm]=monthInput.value.split('-').map(Number),start=new Date(yy,mm-1,1),end=new Date(yy,mm,0);
+ let grand=0;
+ let h='<thead><tr><th>Nhân viên</th><th>Lương/giờ</th><th>Giờ thường</th><th>Giờ tăng ca</th><th>Hệ số OT</th><th>Phụ cấp</th><th>Khấu trừ</th><th>Tạm ứng</th><th>Thực nhận dự kiến</th></tr></thead><tbody>';
+ staff.forEach((name,i)=>{
+  const s=payrollSetting(name);let regular=0,overtime=0;
+  for(let d=new Date(start);d<=end;d.setDate(d.getDate()+1)){
+   const dk=dateKey(d);
+   for(let slot=0;slot<5;slot++){
+    const v=state(dk,slot,i);if(!v||v==='B')continue;
+    regular+=hours('X',slot);
+    if(v==='X+1')overtime+=1;if(v==='X+2')overtime+=2;
+   }
+  }
+  regular=Math.max(0,regular+partialAdjustment(i,dateKey(start),dateKey(end)));
+  const overtimePay=overtime*s.hourlyRate*s.otMultiplier;
+  const gross=regular*s.hourlyRate+overtimePay;
+  const net=Math.max(0,gross+s.allowance-s.deduction-s.advance);grand+=net;
+  const safeName=JSON.stringify(name);
+  h+=`<tr><td class="name"><b>${escapeHtml(name)}</b></td>
+   <td><input type="number" min="0" step="1000" style="width:115px" value="${s.hourlyRate}" onchange='updatePayrollSetting(${safeName},"hourlyRate",this.value)'></td>
+   <td>${regular.toFixed(1)}</td><td>${overtime.toFixed(1)}</td>
+   <td><input type="number" min="0" step="0.1" style="width:70px" value="${s.otMultiplier}" onchange='updatePayrollSetting(${safeName},"otMultiplier",this.value)'></td>
+   <td><input type="number" min="0" step="10000" style="width:95px" value="${s.allowance}" onchange='updatePayrollSetting(${safeName},"allowance",this.value)'></td>
+   <td><input type="number" min="0" step="10000" style="width:95px" value="${s.deduction}" onchange='updatePayrollSetting(${safeName},"deduction",this.value)'></td>
+   <td><input type="number" min="0" step="10000" style="width:95px" value="${s.advance}" onchange='updatePayrollSetting(${safeName},"advance",this.value)'></td>
+   <td><b>${Math.round(net).toLocaleString('vi-VN')} đ</b></td></tr>`;
+ });
+ h+=`<tr class="total-row"><td colspan="8" style="text-align:right"><b>TỔNG LƯƠNG DỰ KIẾN TOÀN BỘ NHÂN VIÊN</b></td><td><b>${Math.round(grand).toLocaleString('vi-VN')} đ</b></td></tr></tbody>`;
+ table.innerHTML=h;
+}
+
+function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+document.querySelectorAll('.nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.section').forEach(x=>x.classList.remove('active'));b.classList.add('active');document.getElementById(b.dataset.page).classList.add('active');document.getElementById('pageTitle').textContent=b.textContent.trim();if(b.dataset.page==='attendance')renderAttendance();if(b.dataset.page==='payroll')renderPayroll();if(b.dataset.page==='myPay')renderMyPay();if(b.dataset.page==='requests'){populateRequestForm();renderRequests()}});
+
+let currentRole='guest', currentEmployee=0;
+let employeePasswords={};
+function loadEmployeePasswords(){try{employeePasswords=JSON.parse(localStorage.getItem('nth_hr_employee_passwords')||'{}')||{};}catch(e){employeePasswords={};}}
+function setEmployeePassword(i){
+ if(currentRole!=='admin')return;
+ const pw=prompt('Đặt mật khẩu riêng cho '+staff[i]+' (ít nhất 4 ký tự):');
+ if(pw===null)return;
+ if(pw.length<4){alert('Mật khẩu cần ít nhất 4 ký tự.');return;}
+ employeePasswords[staff[i]]=pw;
+ localStorage.setItem('nth_hr_employee_passwords',JSON.stringify(employeePasswords));
+ alert('Đã cài mật khẩu cho '+staff[i]+'.');
+}
+function fillLoginNames(){
+ const el=document.getElementById('loginName');
+ el.innerHTML=staff.map((n,i)=>`<option value="${i}">${escapeHtml(n)}</option>`).join('');
+}
+function toggleLoginFields(){
+ const admin=document.getElementById('loginRole').value==='admin';
+ document.getElementById('loginPinWrap').classList.toggle('hidden',!admin);
+ document.getElementById('loginNameWrap').classList.toggle('hidden',admin);
+ document.getElementById('employeePassWrap').classList.toggle('hidden',admin);
+}
+
+let nthAudioCtx=null;
+
+function nthPianoNote(freq, startAt, duration, velocity=.10){
+ try{
+  const Ctx=window.AudioContext||window.webkitAudioContext;if(!Ctx)return;
+  nthAudioCtx=nthAudioCtx||new Ctx();
+  if(nthAudioCtx.state==='suspended')nthAudioCtx.resume();
+  const t=nthAudioCtx.currentTime+startAt;
+  const master=nthAudioCtx.createGain();
+  const filter=nthAudioCtx.createBiquadFilter();
+  filter.type='lowpass';filter.frequency.setValueAtTime(3600,t);
+  master.gain.setValueAtTime(.0001,t);
+  master.gain.exponentialRampToValueAtTime(velocity,t+.018);
+  master.gain.exponentialRampToValueAtTime(Math.max(.0001,velocity*.34),t+.22);
+  master.gain.exponentialRampToValueAtTime(.0001,t+duration);
+  filter.connect(master);master.connect(nthAudioCtx.destination);
+  // A soft fundamental plus harmonics gives a mellow piano-like tone.
+  [1,2,3].forEach((harmonic,index)=>{
+   const osc=nthAudioCtx.createOscillator(),gain=nthAudioCtx.createGain();
+   osc.type='sine';osc.frequency.setValueAtTime(freq*harmonic,t);
+   gain.gain.value=index===0?1:(index===1?.22:.07);
+   osc.connect(gain);gain.connect(filter);
+   osc.start(t);osc.stop(t+duration+.03);
+  });
+ }catch(e){}
+}
+let nthMusicTimer=null;
+let nthMusicRunning=false;
+function nthPlayMusicPhrase(){
+ if(!nthMusicRunning || localStorage.getItem('nth_hr_sound')==='off')return;
+ const manager=currentRole==='admin';
+ const beat=.42;
+ // Giai điệu piano nền êm, có hòa âm; lặp lại liên tục khi đang đăng nhập.
+ const melody=manager
+  ?[523,659,784,880,784,659,587,659,784,988,880,784,659,587,659,784,880,1047,988,880,784,659,587,659,784,880,784,659,587,523,587,659]
+  :[659,784,880,784,659,587,659,784,988,880,784,659,587,523,587,659,784,880,784,659,587,659,784,880,784,659,587,523,587,659,784,659];
+ const chords=[
+  [261.63,329.63,392.00],[220.00,261.63,329.63],
+  [174.61,220.00,261.63],[196.00,246.94,293.66],
+  [261.63,329.63,392.00],[220.00,261.63,329.63],
+  [196.00,246.94,293.66],[174.61,220.00,261.63]
+ ];
+ melody.forEach((n,i)=>nthPianoNote(n,i*beat,.95,(manager ? .052 : .046)));
+ chords.forEach((ch,i)=>ch.forEach((n,j)=>nthPianoNote(n,i*beat*4+j*.035,1.8,.022)));
+}
+function nthStartBackgroundMusic(){
+ nthStopBackgroundMusic();
+ if(localStorage.getItem('nth_hr_sound')==='off')return;
+ nthMusicRunning=true;
+ try{
+  const Ctx=window.AudioContext||window.webkitAudioContext;
+  if(Ctx){nthAudioCtx=nthAudioCtx||new Ctx();if(nthAudioCtx.state==='suspended')nthAudioCtx.resume();}
+ }catch(e){}
+ nthPlayMusicPhrase();
+ nthMusicTimer=setInterval(nthPlayMusicPhrase,14000);
+}
+function nthStopBackgroundMusic(){
+ nthMusicRunning=false;
+ if(nthMusicTimer){clearInterval(nthMusicTimer);nthMusicTimer=null;}
+ if(nthAudioCtx){try{nthAudioCtx.close();}catch(e){}nthAudioCtx=null;}
+}
+function nthSound(kind){
+ if(localStorage.getItem('nth_hr_sound')==='off')return;
+ if(kind==='welcome'){
+  nthStartBackgroundMusic();
+ }else if(kind==='in'){
+  nthPianoNote(659,0,.42,.10);nthPianoNote(880,.17,.58,.10);
+ }else if(kind==='out'){
+  nthPianoNote(784,0,.38,.10);nthPianoNote(659,.18,.38,.09);nthPianoNote(523,.36,.62,.10);
+ }
+}
+
+window.addEventListener('pagehide',nthStopBackgroundMusic);
+function nthNotify(title,message,kind='in'){
+ let box=document.getElementById('nthToast');
+ if(!box){box=document.createElement('div');box.id='nthToast';document.body.appendChild(box);}
+ box.innerHTML=`<div class="nth-toast-icon">${kind==='out'?'✓':'✓'}</div><div><b>${title}</b><div>${message}</div></div><button aria-label="Đóng" onclick="this.parentElement.remove()">×</button>`;
+ box.className='nth-toast show';
+ clearTimeout(window.nthToastTimer);window.nthToastTimer=setTimeout(()=>box.classList.remove('show'),5000);
+}
+
+function login(){
+ const role=document.getElementById('loginRole').value;
+ if(role==='admin'){
+  if(document.getElementById('loginPin').value!=='1234'){alert('Mã quản lý chưa đúng. Mã demo hiện tại: 1234.');return}
+  currentRole='admin';currentEmployee=null;
+ }else{
+  const idx=+document.getElementById('loginName').value;
+  const pw=document.getElementById('employeePass').value;
+  if(!employeePasswords[staff[idx]]){alert('Tài khoản này chưa được quản lý cài mật khẩu. Vui lòng liên hệ quản lý.');return;}
+  if(pw!==employeePasswords[staff[idx]]){alert('Mật khẩu không đúng.');return;}
+  currentRole='employee';currentEmployee=idx;
+ }
+ document.getElementById('employeePass').value='';
+ document.getElementById('authVeil').classList.add('hidden');
+ applyRole();render();renderPayroll();renderMyPay();nthSound('welcome');nthNotify('Đăng nhập thành công','Chào mừng bạn đến với HR Nguyễn Tuấn Hảo.','in');
+}
+function logout(){
+ nthStopBackgroundMusic();
+ currentRole='guest';currentEmployee=null;
+ render();
+ document.getElementById('authVeil').classList.remove('hidden');
+ document.getElementById('loginPin').value='';document.getElementById('employeePass').value='';
+}
+function applyRole(){
+ const admin=currentRole==='admin';
+ document.getElementById('roleLabel').innerHTML=admin?'Quyền: <b>Quản lý</b>':'Quyền: <b>Nhân viên</b>';
+ document.querySelectorAll('.admin-only').forEach(el=>el.classList.toggle('hidden',!admin));document.querySelectorAll('.employee-only').forEach(el=>el.classList.toggle('hidden',admin||currentRole!=='employee'));
+ document.querySelectorAll('.nav button').forEach(btn=>{
+  const allowed=admin||['schedule','requests','attendance','myPay'].includes(btn.dataset.page);
+  btn.classList.toggle('hidden',!allowed);
+ });
+ // Đảm bảo menu và trang Tính lương luôn hiện với quản lý.
+ const payrollNav=document.querySelector('.nav button[data-page="payroll"]');
+ if(payrollNav)payrollNav.classList.toggle('hidden',!admin);
+ const payrollSection=document.getElementById('payroll');
+ if(payrollSection && !admin)payrollSection.classList.remove('active');
+ if(!admin){
+  document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active',b.dataset.page==='schedule'));
+  document.querySelectorAll('.section').forEach(sec=>sec.classList.toggle('active',sec.id==='schedule'));
+  document.getElementById('pageTitle').textContent='Lịch phân ca làm việc';
+  document.getElementById('reqEmployee').value=String(currentEmployee);
+  document.getElementById('reqEmployee').disabled=true;
+  document.getElementById('partEmployee').value=String(currentEmployee);
+  document.getElementById('partEmployee').disabled=true;
+  document.getElementById('partHelper').value=String((currentEmployee+1)%staff.length);
+  populateRequestForm();
+  document.getElementById('reqEmployee').value=String(currentEmployee);
+  document.getElementById('reqEmployee').disabled=true;
+  document.getElementById('partEmployee').value=String(currentEmployee);
+  document.getElementById('partEmployee').disabled=true;
+ }else{
+  document.getElementById('reqEmployee').disabled=false;
+  document.getElementById('partEmployee').disabled=false;
+ }
+}
+
+
+function renderMyPay(){
+ if(currentRole!=='employee'||currentEmployee==null)return;
+ const i=currentEmployee,name=staff[i];if(!name)return;
+ const start=monthStartDate(),today=new Date();today.setHours(0,0,0,0);
+ const setting=payrollSetting(name);let regular=0,ot=0,rows=[];
+ for(let d=new Date(start);d<=today;d.setDate(d.getDate()+1)){
+  const dk=dateKey(d);let dayHours=0,dayOT=0;
+  for(let slot=0;slot<5;slot++){const v=state(dk,slot,i);if(!v||v==='B')continue;dayHours+=hours('X',slot);if(v==='X+1')dayOT+=1;if(v==='X+2')dayOT+=2;}
+  dayHours=Math.max(0,dayHours+partialAdjustment(i,dk,dk));
+  regular+=dayHours;ot+=dayOT;
+  if(dayHours||dayOT)rows.push(`<tr><td>${fmt(d)}</td><td>${dayHours.toFixed(1)}</td><td>${dayOT.toFixed(1)}</td><td>${Math.round(dayHours*setting.hourlyRate+dayOT*setting.hourlyRate*setting.otMultiplier).toLocaleString('vi-VN')} đ</td></tr>`);
+ }
+ const salary=Math.max(0,regular*setting.hourlyRate+ot*setting.hourlyRate*setting.otMultiplier+setting.allowance-setting.deduction-setting.advance);
+ document.getElementById('myPayPeriod').textContent=`${fmt(start)} đến ${fmt(today)} · ${name}`;
+ document.getElementById('myHours').textContent=(regular+ot).toFixed(1)+' giờ';
+ document.getElementById('mySalary').textContent=Math.round(salary).toLocaleString('vi-VN')+' đ';
+ document.getElementById('myPayTable').innerHTML='<thead><tr><th>Ngày</th><th>Giờ thường</th><th>Giờ OT</th><th>Lương theo ngày</th></tr></thead><tbody>'+(rows.join('')||'<tr><td colspan="4">Chưa có giờ công được xếp đến hôm nay.</td></tr>')+'</tbody>';
+}
+
+load();loadPayrollSettings();loadEmployeePasswords();cleanupOldAttendance();render();fillLoginNames();toggleLoginFields();populateRequestForm();
+</script>
+</body></html>
