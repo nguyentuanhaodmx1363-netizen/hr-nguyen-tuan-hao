@@ -260,7 +260,7 @@ body{background:#f3f5f8;color:#202b3b}
   <label id="employeePassWrap">Mật khẩu cá nhân<input id="employeePass" type="password" placeholder="Mật khẩu do quản lý cấp"></label>
   <label id="loginPinWrap" class="hidden">Mã quản lý<input id="loginPin" type="password" placeholder="Nhập mã quản lý"></label>
   <button class="btn primary" onclick="login()">Đăng nhập</button>
-  <div class="footnote">Nhân viên đăng nhập bằng mật khẩu riêng do quản lý cài. Bản HTML thử nghiệm lưu dữ liệu trong trình duyệt, chưa phải bảo mật máy chủ.</div>
+  <div class="footnote">Nhân viên đăng nhập bằng mật khẩu riêng do quản lý cài. Sau khi đăng nhập, mỗi tài khoản có thể tự đổi mật khẩu.</div>
  </div>
 </div>
 <aside class="sidebar">
@@ -275,7 +275,7 @@ body{background:#f3f5f8;color:#202b3b}
  </div>
 </aside>
 <main class="main">
- <div class="top"><div><div class="eyebrow">Quản trị nhân sự</div><div class="title" id="pageTitle">Lịch phân ca làm việc</div><div class="sub">Không gian quản trị nhân sự · phân quyền quản lý và nhân viên · một chi nhánh</div></div><div class="controls"><span class="rolebar" id="roleLabel">Chưa đăng nhập</span><span class="rolebar" id="syncStatus" title="Trạng thái đồng bộ">Đang kết nối dữ liệu…</span><button class="btn" onclick="logout()">Đăng xuất</button><button class="btn" onclick="window.print()">In lịch</button><button class="btn primary admin-only" onclick="exportCSV()">Xuất Excel (CSV)</button></div></div>
+ <div class="top"><div><div class="eyebrow">Quản trị nhân sự</div><div class="title" id="pageTitle">Lịch phân ca làm việc</div><div class="sub">Không gian quản trị nhân sự · phân quyền quản lý và nhân viên · một chi nhánh</div></div><div class="controls"><span class="rolebar" id="roleLabel">Chưa đăng nhập</span><span class="rolebar" id="syncStatus" title="Trạng thái đồng bộ">Đang kết nối dữ liệu…</span><button class="btn" id="changePasswordBtn" onclick="changeMyPassword()">Đổi mật khẩu</button><button class="btn" onclick="logout()">Đăng xuất</button><button class="btn" onclick="window.print()">In lịch</button><button class="btn primary admin-only" onclick="exportCSV()">Xuất Excel (CSV)</button></div></div>
  <section id="schedule" class="section active">
   <div class="cards">
    <div class="card"><div class="label">Nhân viên trong danh sách</div><div class="num" id="staffCount">7</div><div class="hint">Nhân sự của chi nhánh</div></div>
@@ -356,7 +356,7 @@ body{background:#f3f5f8;color:#202b3b}
 </main>
 <script>
 // Đồng bộ dữ liệu HR qua PostgreSQL: cùng một nguồn dữ liệu cho mọi thiết bị/trình duyệt.
-window.__hrSharedKeys = ['ctc_hr_demo','ctc_hr_requests','nth_hr_payroll_settings','ctc_hr_attendance','nth_hr_employee_passwords'];
+window.__hrSharedKeys = ['ctc_hr_demo','ctc_hr_requests','nth_hr_payroll_settings','ctc_hr_attendance','nth_hr_employee_passwords','nth_hr_admin_password'];
 window.__hrSyncReady = false;
 window.__hrPendingWrites = 0;
 window.__hrWriteQueue = Promise.resolve();
@@ -389,13 +389,15 @@ async function __hrApplyRemote(payload){
     for(const k of window.__hrSharedKeys){
       if(Object.prototype.hasOwnProperty.call(remoteState,k)) {
         __hrOriginalSetItem.call(localStorage,k,remoteState[k]);
-      } else if(k==='nth_hr_employee_passwords') {
-        // Migra as senhas já configuradas no navegador do gerente para o banco compartilhado.
-        const legacyPasswords=localStorage.getItem(k);
-        if(legacyPasswords!==null){
-          const seed=await fetch('/api/state',{method:'PUT',headers:{'Content-Type':'application/json'},cache:'no-store',body:JSON.stringify({key:k,value:legacyPasswords})});
-          if(!seed.ok) throw new Error('Không thể đồng bộ mật khẩu nhân viên');
+      } else if(k==='nth_hr_employee_passwords' || k==='nth_hr_admin_password') {
+        // Migrate legacy employee passwords; initialize the manager password to the legacy default only once.
+        const legacyValue=localStorage.getItem(k);
+        const initialValue=legacyValue!==null ? legacyValue : (k==='nth_hr_admin_password' ? '1234' : null);
+        if(initialValue!==null){
+          const seed=await fetch('/api/state',{method:'PUT',headers:{'Content-Type':'application/json'},cache:'no-store',body:JSON.stringify({key:k,value:initialValue})});
+          if(!seed.ok) throw new Error('Không thể đồng bộ mật khẩu tài khoản');
           const saved=await seed.json(); if(typeof saved.revision==='number') payload.revision=saved.revision;
+          __hrOriginalSetItem.call(localStorage,k,initialValue);
         } else localStorage.removeItem(k);
       } else localStorage.removeItem(k);
     }
@@ -785,6 +787,20 @@ document.querySelectorAll('.nav button').forEach(b=>b.onclick=()=>{document.quer
 let currentRole='guest', currentEmployee=0;
 let employeePasswords={};
 function loadEmployeePasswords(){try{employeePasswords=JSON.parse(localStorage.getItem('nth_hr_employee_passwords')||'{}')||{};}catch(e){employeePasswords={};}}
+function getAdminPassword(){return localStorage.getItem('nth_hr_admin_password')||'1234';}
+function changeMyPassword(){
+ if(currentRole!=='admin'&&currentRole!=='employee')return;
+ const oldPw=prompt('Nhập mật khẩu hiện tại:'); if(oldPw===null)return;
+ const current=currentRole==='admin'?getAdminPassword():employeePasswords[staff[currentEmployee]];
+ if(oldPw!==current){alert('Mật khẩu hiện tại không đúng.');return;}
+ const newPw=prompt('Nhập mật khẩu mới (ít nhất 4 ký tự):'); if(newPw===null)return;
+ if(newPw.length<4){alert('Mật khẩu phải có ít nhất 4 ký tự.');return;}
+ const confirmPw=prompt('Nhập lại mật khẩu mới:'); if(confirmPw===null)return;
+ if(newPw!==confirmPw){alert('Hai mật khẩu không khớp.');return;}
+ if(currentRole==='admin'){localStorage.setItem('nth_hr_admin_password',newPw);}
+ else {employeePasswords[staff[currentEmployee]]=newPw;localStorage.setItem('nth_hr_employee_passwords',JSON.stringify(employeePasswords));}
+ alert('Đổi mật khẩu thành công. Mật khẩu mới đã được đồng bộ để sử dụng trên các thiết bị.');
+}
 function setEmployeePassword(i){
  if(currentRole!=='admin')return;
  const pw=prompt('Đặt mật khẩu riêng cho '+staff[i]+' (ít nhất 4 ký tự):');
@@ -889,7 +905,7 @@ function nthNotify(title,message,kind='in'){
 function login(){
  const role=document.getElementById('loginRole').value;
  if(role==='admin'){
-  if(document.getElementById('loginPin').value!=='1234'){alert('Mã quản lý chưa đúng. Mã demo hiện tại: 1234.');return}
+  if(document.getElementById('loginPin').value!==getAdminPassword()){alert('Mã quản lý chưa đúng.');return}
   currentRole='admin';currentEmployee=null;
  }else{
   const idx=+document.getElementById('loginName').value;
