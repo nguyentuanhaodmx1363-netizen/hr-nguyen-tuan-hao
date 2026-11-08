@@ -6,7 +6,7 @@ const { Pool } = require('pg');
 const app = express();
 const port = process.env.PORT || 10000;
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false });
-const ALLOWED = new Set(['ctc_hr_demo', 'ctc_hr_requests', 'nth_hr_payroll_settings', 'ctc_hr_attendance']);
+const ALLOWED = new Set(['ctc_hr_demo', 'ctc_hr_requests', 'nth_hr_payroll_settings', 'ctc_hr_attendance', 'nth_hr_employee_passwords']);
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(express.json({ limit: '1mb' }));
 app.use('/api/', rateLimit({ windowMs: 60_000, limit: 120, standardHeaders: 'draft-7', legacyHeaders: false }));

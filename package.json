@@ -1,6 +1,6 @@
 {
   "name": "hr-nguyen-tuan-hao-shared",
-  "version": "1.0.1",
+  "version": "1.0.5",
   "private": true,
   "description": "HR Nguyen Tuan Hao with shared PostgreSQL storage",
   "main": "server.js",
