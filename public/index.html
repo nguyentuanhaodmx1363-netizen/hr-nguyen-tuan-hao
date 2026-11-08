@@ -339,8 +339,8 @@ body{background:#f3f5f8;color:#202b3b}
 <section id="payroll" class="section">
  <div class="panel">
   <div class="toolbar">
-   <div><h2>Bảng tính lương nhân viên</h2><div class="sub">Thiết lập mức lương riêng cho từng nhân viên và tính theo tháng.</div></div>
-   <div class="controls"><label>Tháng tính lương <input type="month" id="payrollMonth" onchange="renderPayroll()"></label><button class="btn" onclick="renderPayroll()">Tính lại</button></div>
+   <div><h2>Bảng tính lương nhân viên</h2><div class="sub">Chọn khoảng ngày cần xem; hệ thống chỉ tính giờ công trong khoảng đã chọn.</div></div>
+   <div class="controls"><label>Từ ngày <input type="date" id="payrollStart" onchange="renderPayroll()"></label><label>Đến ngày <input type="date" id="payrollEnd" onchange="renderPayroll()"></label><button class="btn" onclick="setPayrollCurrentMonth()">Cả tháng này</button><button class="btn" onclick="renderPayroll()">Tính lại</button></div>
   </div>
   <div class="footnote">Tất cả nhân viên tính lương theo giờ; mỗi người có đơn giá giờ riêng. Hệ thống tính giờ theo lịch đã xếp, giờ làm thêm X+1/X+2, giờ hỗ trợ làm thay đã duyệt, phụ cấp, khấu trừ và tạm ứng. Đây là lương dự kiến theo lịch, chưa phải bảng công thực tế đã xác nhận.</div>
   <div class="tablewrap"><table id="payrollTable"></table></div>
@@ -719,11 +719,26 @@ function updatePayrollSetting(name,field,value){
  if(field==='type')s[field]=value;else s[field]=Math.max(0,Number(value)||0);
  payrollSettings[name]=s;savePayrollSettings();renderPayroll();
 }
+function setPayrollCurrentMonth(){
+ const now=new Date();
+ const start=new Date(now.getFullYear(),now.getMonth(),1);
+ document.getElementById('payrollStart').value=dateKey(start);
+ document.getElementById('payrollEnd').value=dateKey(now);
+ renderPayroll();
+}
 function renderPayroll(){
  const table=document.getElementById('payrollTable');if(!table)return;
- const monthInput=document.getElementById('payrollMonth');
- if(!monthInput.value){const n=new Date();monthInput.value=`${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}`;}
- const [yy,mm]=monthInput.value.split('-').map(Number),start=new Date(yy,mm-1,1),end=new Date(yy,mm,0);
+ const startInput=document.getElementById('payrollStart');
+ const endInput=document.getElementById('payrollEnd');
+ const today=new Date();today.setHours(0,0,0,0);
+ if(!startInput.value||!endInput.value){
+  const start=new Date(today.getFullYear(),today.getMonth(),1);
+  startInput.value=dateKey(start);endInput.value=dateKey(today);
+ }
+ const start=new Date(startInput.value+'T00:00:00');
+ const end=new Date(endInput.value+'T00:00:00');
+ if(Number.isNaN(start.getTime())||Number.isNaN(end.getTime()))return;
+ if(start>end){alert('Ngày bắt đầu không được sau ngày kết thúc.');return;}
  let grand=0;
  let h='<thead><tr><th>Nhân viên</th><th>Lương/giờ</th><th>Giờ thường</th><th>Giờ tăng ca</th><th>Hệ số OT</th><th>Phụ cấp</th><th>Khấu trừ</th><th>Tạm ứng</th><th>Thực nhận dự kiến</th></tr></thead><tbody>';
  staff.forEach((name,i)=>{
@@ -750,7 +765,7 @@ function renderPayroll(){
    <td><input type="number" min="0" step="10000" style="width:95px" value="${s.advance}" onchange='updatePayrollSetting(${safeName},"advance",this.value)'></td>
    <td><b>${Math.round(net).toLocaleString('vi-VN')} đ</b></td></tr>`;
  });
- h+=`<tr class="total-row"><td colspan="8" style="text-align:right"><b>TỔNG LƯƠNG DỰ KIẾN TOÀN BỘ NHÂN VIÊN</b></td><td><b>${Math.round(grand).toLocaleString('vi-VN')} đ</b></td></tr></tbody>`;
+ h+=`<tr class="total-row"><td colspan="8" style="text-align:right"><b>TỔNG LƯƠNG DỰ KIẾN (${fmt(start)} – ${fmt(end)})</b></td><td><b>${Math.round(grand).toLocaleString('vi-VN')} đ</b></td></tr></tbody>`;
  table.innerHTML=h;
 }
 
