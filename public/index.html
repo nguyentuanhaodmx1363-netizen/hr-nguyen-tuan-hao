@@ -415,7 +415,7 @@ window.addEventListener('focus',__hrPoll);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)__hrPoll();});
 </script>
 <script>
-const slots=['08–12','12–16','16–22','10–14','18–23'];
+const slots=['08–12','12–16','16–23','10–14','18–23'];
 let staff=['Nguyễn Thanh Bình','Trần Vương Khánh Linh','Nguyễn Thái Yến Nhi','Nguyễn Văn Đức','Đoàn Hữu Lộc','Nguyễn Lý Bình Kiên','Nguyễn Duy Quang Huy'];
 let weekStart=new Date();weekStart.setDate(weekStart.getDate()-((weekStart.getDay()+6)%7));weekStart.setHours(0,0,0,0);
 let data={};
@@ -426,7 +426,7 @@ function setState(d,s,i,v){const k=key(d,s,i);if(v)data[k]=v;else delete data[k]
 function save(){localStorage.setItem('ctc_hr_demo',JSON.stringify({staff,data,week:dateKey(weekStart)}))}
 function load(){try{let x=JSON.parse(localStorage.getItem('ctc_hr_demo'));if(x){staff=x.staff||staff;data=x.data||{};if(x.week)weekStart=new Date(x.week+'T00:00:00')}attendance=JSON.parse(localStorage.getItem('ctc_hr_attendance')||'{}');requests=JSON.parse(localStorage.getItem('ctc_hr_requests')||'[]')}catch(e){}}
 function fmt(d){return d.toLocaleDateString('vi-VN',{day:'2-digit',month:'2-digit'})}
-function hours(v,s){if(!v||v==='B')return 0;let base=[4,4,6,4,5][s];return base+(v==='X+1'?1:v==='X+2'?2:0)}
+function hours(v,s){if(!v||v==='B')return 0;let base=[4,4,7,4,5][s];return base+(v==='X+1'?1:v==='X+2'?2:0)}
 function render(){
  const table=document.getElementById('scheduleTable');let h='<thead><tr><th class="name" rowspan="2">HỌ VÀ TÊN</th>';
  for(let d=0;d<7;d++){let dt=new Date(weekStart);dt.setDate(dt.getDate()+d);let wd=['CHỦ NHẬT','THỨ 2','THỨ 3','THỨ 4','THỨ 5','THỨ 6','THỨ 7'][dt.getDay()];let weekend=dt.getDay()===0||dt.getDay()===6;h+=`<th colspan="5"><div class="dayhead ${weekend?'weekend':''}"><span class="weekday">${wd}</span><span class="date">${fmt(dt)}</span></div></th>`}h+='<th class="total" rowspan="2">TỔNG GIỜ CÔNG TUẦN</th></tr><tr>';
