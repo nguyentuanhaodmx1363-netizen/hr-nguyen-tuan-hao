@@ -240,7 +240,7 @@ body{background:#f3f5f8;color:#202b3b}
  </div>
 </aside>
 <main class="main">
- <div class="top"><div><div class="eyebrow">Quản trị nhân sự</div><div class="title" id="pageTitle">Lịch phân ca làm việc</div><div class="sub">Không gian quản trị nhân sự · phân quyền quản lý và nhân viên · một chi nhánh</div></div><div class="controls"><span class="rolebar" id="roleLabel">Chưa đăng nhập</span><button class="btn" onclick="logout()">Đăng xuất</button><button class="btn" onclick="window.print()">In lịch</button><button class="btn primary admin-only" onclick="exportCSV()">Xuất Excel (CSV)</button></div></div>
+ <div class="top"><div><div class="eyebrow">Quản trị nhân sự</div><div class="title" id="pageTitle">Lịch phân ca làm việc</div><div class="sub">Không gian quản trị nhân sự · phân quyền quản lý và nhân viên · một chi nhánh</div></div><div class="controls"><span class="rolebar" id="roleLabel">Chưa đăng nhập</span><span class="rolebar" id="syncStatus" title="Trạng thái đồng bộ">Đang kết nối dữ liệu…</span><button class="btn" onclick="logout()">Đăng xuất</button><button class="btn" onclick="window.print()">In lịch</button><button class="btn primary admin-only" onclick="exportCSV()">Xuất Excel (CSV)</button></div></div>
  <section id="schedule" class="section active">
   <div class="cards">
    <div class="card"><div class="label">Nhân viên trong danh sách</div><div class="num" id="staffCount">7</div><div class="hint">Nhân sự của chi nhánh</div></div>
@@ -319,6 +319,101 @@ body{background:#f3f5f8;color:#202b3b}
 </section>
 <section id="reports" class="section"><div class="panel"><h2>Báo cáo công</h2><p>Bảng phân ca hiện tính tổng giờ dự kiến theo từng nhân viên. Báo cáo công thực tế cần đồng bộ dữ liệu chấm công.</p><div id="reportList"></div></div></section>
 </main>
+<script>
+// Đồng bộ dữ liệu HR qua PostgreSQL: cùng một nguồn dữ liệu cho mọi thiết bị/trình duyệt.
+window.__hrSharedKeys = ['ctc_hr_demo','ctc_hr_requests','nth_hr_payroll_settings','ctc_hr_attendance'];
+window.__hrSyncReady = false;
+window.__hrPendingWrites = 0;
+window.__hrWriteQueue = Promise.resolve();
+window.__hrServerRevision = -1;
+const __hrOriginalSetItem = Storage.prototype.setItem;
+function __hrStatus(message, bad=false){
+  const el=document.getElementById('syncStatus');
+  if(el){el.textContent=message;el.style.color=bad?'#b42318':'#247b5b';}
+}
+async function __hrFetchState(){
+  const r=await fetch('/api/state',{cache:'no-store',headers:{'Accept':'application/json'}});
+  if(!r.ok) throw new Error('HTTP '+r.status);
+  return await r.json();
+}
+async function __hrApplyRemote(payload){
+  if(!payload || typeof payload.revision!=='number') return;
+  if(payload.revision===window.__hrServerRevision) return;
+  const remoteState=payload.state||{};
+  // If the database is genuinely empty, preserve and seed this browser's existing data instead of erasing it.
+  if(payload.revision===0 && Object.keys(remoteState).length===0){
+    for(const k of window.__hrSharedKeys){
+      const localValue=localStorage.getItem(k);
+      if(localValue!==null){
+        const seed=await fetch('/api/state',{method:'PUT',headers:{'Content-Type':'application/json'},cache:'no-store',body:JSON.stringify({key:k,value:localValue})});
+        if(!seed.ok) throw new Error('Không thể khởi tạo dữ liệu dùng chung');
+        const saved=await seed.json(); if(typeof saved.revision==='number') payload.revision=saved.revision;
+      }
+    }
+  }else{
+    for(const k of window.__hrSharedKeys){
+      if(Object.prototype.hasOwnProperty.call(remoteState,k)) __hrOriginalSetItem.call(localStorage,k,remoteState[k]);
+      else localStorage.removeItem(k);
+    }
+  }
+  window.__hrServerRevision=payload.revision;
+  // Cập nhật các biến đang chạy, không yêu cầu người dùng tải lại trang.
+  if(typeof load==='function') load();
+  if(typeof loadPayrollSettings==='function') loadPayrollSettings();
+  if(typeof render==='function') render();
+  if(typeof renderPayroll==='function' && typeof currentRole!=='undefined' && currentRole==='admin') renderPayroll();
+  if(typeof renderMyPay==='function' && typeof currentRole!=='undefined' && currentRole==='employee') renderMyPay();
+  if(typeof renderRequests==='function') renderRequests();
+  if(typeof renderAttendance==='function' && document.getElementById('attendance')?.classList.contains('active')) renderAttendance();
+}
+window.__hrBootstrap=(async()=>{
+  try{
+    const payload=await __hrFetchState();
+    await __hrApplyRemote(payload);
+    window.__hrSyncReady=true;
+    __hrStatus('Đã kết nối · dữ liệu dùng chung');
+  }catch(e){
+    window.__hrSyncReady=true;
+    __hrStatus('Mất kết nối máy chủ – chưa xác nhận lưu',true);
+    console.error('Không tải được dữ liệu HR từ máy chủ:',e);
+  }
+})();
+Storage.prototype.setItem=function(k,v){
+  __hrOriginalSetItem.call(this,k,v);
+  if(this!==localStorage || !window.__hrSyncReady || !window.__hrSharedKeys.includes(k)) return;
+  window.__hrPendingWrites++;
+  __hrStatus('Đang lưu lên máy chủ…');
+  const value=String(v);
+  window.__hrWriteQueue=window.__hrWriteQueue.then(async()=>{
+    const r=await fetch('/api/state',{method:'PUT',headers:{'Content-Type':'application/json'},cache:'no-store',body:JSON.stringify({key:k,value})});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const result=await r.json();
+    if(typeof result.revision==='number') window.__hrServerRevision=result.revision;
+  }).then(()=>{
+    window.__hrPendingWrites=Math.max(0,window.__hrPendingWrites-1);
+    if(!window.__hrPendingWrites) __hrStatus('Đã lưu trên máy chủ ✓');
+  }).catch(e=>{
+    window.__hrPendingWrites=Math.max(0,window.__hrPendingWrites-1);
+    __hrStatus('Lỗi lưu dữ liệu – kiểm tra mạng',true);
+    console.error('Không đồng bộ được dữ liệu HR:',e);
+  });
+};
+async function __hrPoll(){
+  if(document.hidden || window.__hrPendingWrites) return;
+  try{
+    const payload=await __hrFetchState();
+    if(payload.revision!==window.__hrServerRevision){
+      await __hrApplyRemote(payload);
+      __hrStatus('Đã cập nhật từ thiết bị khác ✓');
+    }else if(window.__hrSyncReady){
+      __hrStatus('Đã đồng bộ · mới nhất ✓');
+    }
+  }catch(e){__hrStatus('Không kết nối được máy chủ',true);}
+}
+setInterval(__hrPoll,5000);
+window.addEventListener('focus',__hrPoll);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)__hrPoll();});
+</script>
 <script>
 const slots=['08–12','12–16','16–22','10–14','18–23'];
 let staff=['Nguyễn Thanh Bình','Trần Vương Khánh Linh','Nguyễn Thái Yến Nhi','Nguyễn Văn Đức','Đoàn Hữu Lộc','Nguyễn Lý Bình Kiên','Nguyễn Duy Quang Huy'];
@@ -807,6 +902,6 @@ function renderMyPay(){
  document.getElementById('myPayTable').innerHTML='<thead><tr><th>Ngày</th><th>Giờ thường</th><th>Giờ OT</th><th>Lương theo ngày</th></tr></thead><tbody>'+(rows.join('')||'<tr><td colspan="4">Chưa có giờ công được xếp đến hôm nay.</td></tr>')+'</tbody>';
 }
 
-load();loadPayrollSettings();loadEmployeePasswords();cleanupOldAttendance();render();fillLoginNames();toggleLoginFields();populateRequestForm();
+window.__hrBootstrap.then(()=>{load();loadPayrollSettings();loadEmployeePasswords();cleanupOldAttendance();render();fillLoginNames();toggleLoginFields();populateRequestForm();});
 </script>
 </body></html>

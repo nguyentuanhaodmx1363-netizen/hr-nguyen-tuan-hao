@@ -6,7 +6,7 @@ const { Pool } = require('pg');
 const app = express();
 const port = process.env.PORT || 10000;
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false });
-const ALLOWED = new Set(['ctc_hr_demo', 'ctc_hr_requests', 'nth_hr_payroll_settings']);
+const ALLOWED = new Set(['ctc_hr_demo', 'ctc_hr_requests', 'nth_hr_payroll_settings', 'ctc_hr_attendance']);
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(express.json({ limit: '1mb' }));
 app.use('/api/', rateLimit({ windowMs: 60_000, limit: 120, standardHeaders: 'draft-7', legacyHeaders: false }));
@@ -38,14 +38,20 @@ app.get('/api/state', async (_req,res)=>{
 app.put('/api/state', async (req,res)=>{
   const {key,value} = req.body || {};
   if (!ALLOWED.has(key) || typeof value !== 'string' || value.length > 900_000) return res.status(400).json({error:'Dữ liệu không hợp lệ'});
+  let client;
   try {
-    await pool.query('BEGIN');
-    await pool.query(`INSERT INTO hr_shared_state(state_key,state_value,updated_at) VALUES($1,$2,NOW())
+    client = await pool.connect();
+    await client.query('BEGIN');
+    await client.query(`INSERT INTO hr_shared_state(state_key,state_value,updated_at) VALUES($1,$2,NOW())
       ON CONFLICT(state_key) DO UPDATE SET state_value=EXCLUDED.state_value,updated_at=NOW()`,[key,value]);
-    const result = await pool.query('UPDATE hr_shared_meta SET revision=revision+1 WHERE id=1 RETURNING revision');
-    await pool.query('COMMIT');
-    res.json({ok:true,revision:Number(result.rows[0].revision)});
-  } catch(e){ try{await pool.query('ROLLBACK')}catch(_){} console.error(e); res.status(500).json({error:'Không lưu được dữ liệu'}); }
+    const result = await client.query('UPDATE hr_shared_meta SET revision=revision+1 WHERE id=1 RETURNING revision');
+    await client.query('COMMIT');
+    res.set('Cache-Control','no-store').json({ok:true,revision:Number(result.rows[0].revision)});
+  } catch(e){
+    if(client){try{await client.query('ROLLBACK')}catch(_){}}
+    console.error('Lỗi ghi dữ liệu HR:',e);
+    res.status(500).json({error:'Không lưu được dữ liệu'});
+  } finally { if(client) client.release(); }
 });
 app.use(express.static('public'));
 app.get('*', (_req,res)=>res.sendFile(require('path').join(__dirname,'public','index.html')));

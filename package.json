@@ -1,11 +1,15 @@
 {
   "name": "hr-nguyen-tuan-hao-shared",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "HR Nguyen Tuan Hao with shared PostgreSQL storage",
   "main": "server.js",
-  "scripts": {"start": "node server.js"},
-  "engines": {"node": ">=20"},
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
   "dependencies": {
     "express": "^4.21.2",
     "pg": "^8.13.1",
