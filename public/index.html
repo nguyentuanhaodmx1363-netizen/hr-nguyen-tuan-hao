@@ -356,7 +356,7 @@ body{background:#f3f5f8;color:#202b3b}
 </main>
 <script>
 // Đồng bộ dữ liệu HR qua PostgreSQL: cùng một nguồn dữ liệu cho mọi thiết bị/trình duyệt.
-window.__hrSharedKeys = ['ctc_hr_demo','ctc_hr_requests','nth_hr_payroll_settings','ctc_hr_attendance'];
+window.__hrSharedKeys = ['ctc_hr_demo','ctc_hr_requests','nth_hr_payroll_settings','ctc_hr_attendance','nth_hr_employee_passwords'];
 window.__hrSyncReady = false;
 window.__hrPendingWrites = 0;
 window.__hrWriteQueue = Promise.resolve();
@@ -387,14 +387,24 @@ async function __hrApplyRemote(payload){
     }
   }else{
     for(const k of window.__hrSharedKeys){
-      if(Object.prototype.hasOwnProperty.call(remoteState,k)) __hrOriginalSetItem.call(localStorage,k,remoteState[k]);
-      else localStorage.removeItem(k);
+      if(Object.prototype.hasOwnProperty.call(remoteState,k)) {
+        __hrOriginalSetItem.call(localStorage,k,remoteState[k]);
+      } else if(k==='nth_hr_employee_passwords') {
+        // Migra as senhas já configuradas no navegador do gerente para o banco compartilhado.
+        const legacyPasswords=localStorage.getItem(k);
+        if(legacyPasswords!==null){
+          const seed=await fetch('/api/state',{method:'PUT',headers:{'Content-Type':'application/json'},cache:'no-store',body:JSON.stringify({key:k,value:legacyPasswords})});
+          if(!seed.ok) throw new Error('Không thể đồng bộ mật khẩu nhân viên');
+          const saved=await seed.json(); if(typeof saved.revision==='number') payload.revision=saved.revision;
+        } else localStorage.removeItem(k);
+      } else localStorage.removeItem(k);
     }
   }
   window.__hrServerRevision=payload.revision;
   // Cập nhật các biến đang chạy, không yêu cầu người dùng tải lại trang.
   if(typeof load==='function') load();
   if(typeof loadPayrollSettings==='function') loadPayrollSettings();
+  if(typeof loadEmployeePasswords==='function') loadEmployeePasswords();
   if(typeof render==='function') render();
   if(typeof renderPayroll==='function' && typeof currentRole!=='undefined' && currentRole==='admin') renderPayroll();
   if(typeof renderMyPay==='function' && typeof currentRole!=='undefined' && currentRole==='employee') renderMyPay();
