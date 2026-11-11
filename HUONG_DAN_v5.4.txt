@@ -1,0 +1,6 @@
+RENEW ZONE v5.4
+1. Đẩy cả public/index.html và server.js lên GitHub (cần cả hai).
+2. Trên Render > Environment thêm MANAGER_RECOVERY_CODE với mã ngẫu nhiên bí mật dài ít nhất 20 ký tự. Không gửi mã cho nhân viên, không đưa vào GitHub.
+3. Deploy, kiểm tra đăng nhập, hiện/ẩn mật khẩu, đổi mật khẩu bằng mật khẩu cũ, quên mật khẩu bằng mã khôi phục.
+4. Nếu chưa thiết lập mã, chức năng quên mật khẩu sẽ thông báo chưa cấu hình. Nhân viên liên hệ quản lý.
+5. Không cần thay đổi cơ sở dữ liệu.

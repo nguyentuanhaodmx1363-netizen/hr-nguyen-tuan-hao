@@ -1,0 +1,7 @@
+RENEW ZONE v3.7 - Dashboard quản lý
+- Logo căn giữa, in đậm, N và ZONE màu hồng, bấm về tổng quan.
+- Chi tiết nhân viên: sử dụng Dashboard cá nhân, ẩn các bảng so sánh đội ngũ không liên quan.
+- Thu gọn Biến động doanh thu theo ngày và Doanh thu theo nhân viên.
+- So sánh cùng kỳ: 3 thẻ Tổng/Máy/Bảo hiểm với mức chênh lệch và thanh so sánh.
+- Tổng doanh thu: thêm KPI doanh thu, máy, bảo hiểm và tỷ lệ hoàn thành.
+Cập nhật GitHub: thay public/index.html. Chưa thử nghiệm với dữ liệu Neon thực tế.

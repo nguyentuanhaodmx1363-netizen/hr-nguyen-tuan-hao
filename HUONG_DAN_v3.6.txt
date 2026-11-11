@@ -1,0 +1,1 @@
+RENEWZONE v3.6: Logo Renew Zone (n va Zone mau hong), nhan logo ve man hinh chinh. Quan ly ve Tong quan; nhan vien ve Hieu suat cua toi. Chi can cap nhat public/index.html tu ZIP nay.
