@@ -4,6 +4,7 @@ const rateLimit = require('express-rate-limit');
 const { Pool } = require('pg');
 
 const app = express();
+app.set('trust proxy', 1);
 const port = process.env.PORT || 10000;
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false });
 const ALLOWED = new Set(['ctc_hr_demo', 'ctc_hr_requests', 'nth_hr_payroll_settings', 'ctc_hr_attendance', 'nth_hr_employee_passwords', 'nth_hr_admin_password']);
