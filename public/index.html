@@ -925,6 +925,50 @@ body{background:#f4f6fa;color:var(--ink)}body:before{display:none}
 #dashboard .rz-revenue-breakout .revenue-meta{line-height:1.5!important}
 @media(max-width:1050px) and (min-width:541px){#dashboard .revenue-panel>#revenueKpiCard,#dashboard .revenue-panel>#insuranceKpiCard{min-height:145px!important}}
 @media(max-width:540px){#dashboard .revenue-panel>.rz-revenue-kpi{min-height:130px!important}}
+</style><style id="rz-one-row-revenue">
+/* One compact revenue strip: 3 financial totals + 2 KPI rings */
+@media(min-width:1180px){
+#dashboard .revenue-panel{display:grid!important;grid-template-columns:minmax(0,1.55fr) minmax(0,1.3fr) minmax(0,1.3fr) minmax(0,1fr) minmax(0,1fr)!important;gap:9px!important;align-items:stretch!important;padding:10px!important}
+#dashboard .revenue-panel>.rz-total-tile{grid-column:1!important;grid-row:1!important}
+#dashboard .revenue-panel>.rz-revenue-breakout{display:contents!important}
+#dashboard .rz-revenue-breakout>.revenue-line:first-child{grid-column:2!important;grid-row:1!important}
+#dashboard .rz-revenue-breakout>.revenue-line:nth-child(2){grid-column:3!important;grid-row:1!important}
+#dashboard .revenue-panel>#revenueKpiCard{grid-column:4!important;grid-row:1!important}
+#dashboard .revenue-panel>#insuranceKpiCard{grid-column:5!important;grid-row:1!important}
+#dashboard .revenue-panel>#comparePanel{grid-column:1/-1!important;grid-row:2!important}
+}
+@media(min-width:1180px){
+#dashboard .revenue-panel>.rz-total-tile{min-height:132px!important;padding:16px!important;border-radius:13px!important}
+#dashboard .revenue-panel .revenue-total{font-size:clamp(22px,2.05vw,35px)!important;line-height:1.18!important;overflow-wrap:anywhere}
+#dashboard .revenue-panel .rz-revenue-breakout>.revenue-line{min-height:132px!important;padding:12px!important;align-items:flex-start!important;border-radius:13px!important;gap:6px!important}
+#dashboard .revenue-panel .rz-revenue-breakout>.revenue-line b{font-size:clamp(17px,1.42vw,24px)!important;margin:7px 0!important}
+#dashboard .revenue-panel .rz-revenue-breakout .bubble{font-size:13px!important}
+#dashboard .revenue-panel>.rz-revenue-kpi{min-height:132px!important;padding:9px!important;gap:4px!important;display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;text-align:center!important;border-radius:13px!important}
+#dashboard .revenue-panel>.rz-revenue-kpi .rz-revenue-kpi-ring{width:72px!important;height:72px!important;min-width:72px!important;min-height:72px!important;margin:0 auto!important}
+#dashboard .revenue-panel>.rz-revenue-kpi .rz-revenue-kpi-center strong{font-size:16px!important}
+#dashboard .revenue-panel>.rz-revenue-kpi .rz-revenue-kpi-center span{font-size:9px!important}
+#dashboard .revenue-panel>.rz-revenue-kpi .rz-revenue-kpi-label{font-size:10px!important;margin:2px 0!important}
+#dashboard .revenue-panel>.rz-revenue-kpi .rz-revenue-kpi-target{font-size:9px!important;line-height:1.35!important;max-width:100%!important}
+}
+@media(min-width:760px) and (max-width:1179px){
+#dashboard .revenue-panel{grid-template-columns:repeat(6,minmax(0,1fr))!important}
+#dashboard .revenue-panel>.rz-total-tile{grid-column:1/3!important;grid-row:1!important}
+#dashboard .revenue-panel>.rz-revenue-breakout{grid-column:3/7!important;grid-row:1!important}
+#dashboard .revenue-panel>#revenueKpiCard{grid-column:1/4!important;grid-row:2!important}
+#dashboard .revenue-panel>#insuranceKpiCard{grid-column:4/7!important;grid-row:2!important}
+}
+</style><style id="rz-revenue-card-colors">
+/* Distinct soft-tinted cards for the four highlighted revenue/KPI tiles */
+@media(min-width:1180px){
+#dashboard .rz-revenue-breakout>.revenue-line:first-child{background:linear-gradient(145deg,#edf5ff,#f7faff)!important;border:1px solid #c9ddff!important;border-top:3px solid #4489e6!important;box-shadow:0 5px 18px rgba(49,116,205,.07)!important}
+#dashboard .rz-revenue-breakout>.revenue-line:nth-child(2){background:linear-gradient(145deg,#fff0f7,#fff9fc)!important;border:1px solid #f4cde1!important;border-top:3px solid #e55b9d!important;box-shadow:0 5px 18px rgba(214,70,143,.07)!important}
+#dashboard .revenue-panel>#revenueKpiCard{background:linear-gradient(145deg,#f3edff,#fcfaff)!important;border:1px solid #dac9ff!important;border-top:3px solid #9157df!important;box-shadow:0 5px 18px rgba(115,74,204,.07)!important}
+#dashboard .revenue-panel>#insuranceKpiCard{background:linear-gradient(145deg,#fff0f5,#fffafd)!important;border:1px solid #f4cde0!important;border-top:3px solid #df5a9b!important;box-shadow:0 5px 18px rgba(215,80,142,.07)!important}
+}
+#dashboard .rz-revenue-breakout>.revenue-line:first-child{background:linear-gradient(145deg,#edf5ff,#f8fbff)!important;border-color:#c9ddff!important}
+#dashboard .rz-revenue-breakout>.revenue-line:nth-child(2){background:linear-gradient(145deg,#fff0f7,#fffafd)!important;border-color:#f4cde1!important}
+#dashboard .revenue-panel>#revenueKpiCard{background:linear-gradient(145deg,#f3edff,#fcfaff)!important;border-color:#dac9ff!important}
+#dashboard .revenue-panel>#insuranceKpiCard{background:linear-gradient(145deg,#fff0f5,#fffafd)!important;border-color:#f4cde0!important}
 </style></head><body><style id="rz-login-v55-style">
 .rz-login-v55{width:min(460px,100%)!important;padding:34px!important;border-radius:22px!important;background:#fff!important;box-shadow:0 22px 70px rgba(95,57,155,.16)!important;border:1px solid #eadff8!important}
 .rz-login-v55 .rz-login-brand{text-align:center;margin-bottom:24px}.rz-login-v55 .brand{font-size:25px!important;margin:0!important;color:#2b2242!important}.rz-login-v55 .subbrand{color:#8a7d9c!important;letter-spacing:3px!important;font-size:10px!important;margin:4px 0 0!important}.rz-login-v55 h1{font-size:27px!important}.rz-login-v55 .field{margin:16px 0!important;color:#59476f!important;font-size:13px!important}.rz-login-v55 .field input{min-height:45px;background:#fcfaff!important;border:1px solid #e5d9f6!important}.rz-login-v55 .rz-password-wrap{width:100%;position:relative;display:flex;align-items:center}.rz-login-v55 .rz-password-wrap input{padding-right:78px!important}.rz-login-v55 .rz-eye{position:absolute!important;right:7px!important;top:50%!important;transform:translateY(-50%)!important;background:#f2e8ff!important;color:#6534aa!important;border:0!important;box-shadow:none!important;padding:8px 12px!important;width:auto!important;min-height:32px!important}.rz-login-v55 .rz-login-submit{width:100%!important;min-height:46px;background:linear-gradient(100deg,#9b55e8,#e65c9b)!important;color:white!important}.rz-login-v55 .rz-login-actions{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:12px!important;margin-top:15px!important;flex-wrap:wrap!important}.rz-login-v55 .rz-link-btn{background:transparent!important;border:0!important;box-shadow:none!important;color:#7838b9!important;padding:7px 2px!important;font-size:13px!important;font-weight:750!important}.rz-login-v55 .rz-auth-panel{margin-top:14px;padding:16px;background:#faf6ff;border:1px solid #e8daf9;border-radius:15px}.rz-login-v55 .rz-auth-panel.hidden{display:none!important}.rz-login-v55 .rz-build-tag{text-align:center;font-size:10px;color:#aa9cbb;margin-top:20px}.rz-login-v55 #loginError:empty{display:none}
