@@ -844,7 +844,15 @@ app.get('/api/manager-payroll',auth,manager,wrap(async(req,res)=>{
  const stats={bought:0,failed:0}; // Kiot invoice file has no non-buyers; manager must confirm rate manually.
  const machines=Number(sales.machines),insured=Number(sales.insured),bought=Number(stats.bought),failed=Number(stats.failed);
  const attachment=machines?insured/machines*100:null,drop=bought+failed?failed/(bought+failed)*100:null;
- const baseMachine=rzManagerMachineBonus(machines),baseInsurance=rzManagerInsuranceBonus(machines,insured);
+ // Forecast only for the currently running month, using Vietnam local calendar days.
+ const vnToday=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Ho_Chi_Minh',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+ const currentMonth=vnToday.slice(0,7)===month;
+ const daysInMonth=Number(to.slice(8,10));
+ const elapsedDays=currentMonth?Math.min(daysInMonth,Math.max(1,Number(vnToday.slice(8,10)))):daysInMonth;
+ const forecastMultiplier=currentMonth?daysInMonth/elapsedDays:1;
+ const projectedMachines=Math.round(machines*forecastMultiplier);
+ const projectedInsured=Math.round(insured*forecastMultiplier);
+ const baseMachine=rzManagerMachineBonus(projectedMachines),baseInsurance=rzManagerInsuranceBonus(projectedMachines,projectedInsured);
  const inferred=attachment===null||drop===null?null:rzManagerBusinessRate(attachment,drop);
  const rate=config?.business_rate_override!=null?Number(config.business_rate_override)/100:inferred;
  const scores=[config?.store_score,config?.operations_score,config?.service_score];
@@ -865,7 +873,7 @@ app.get('/api/manager-payroll',auth,manager,wrap(async(req,res)=>{
  if(inferred===null&&config?.business_rate_override==null)warnings.push('Chính sách không xác định được mức hưởng kinh doanh cho tổ hợp tỷ lệ hiện tại; cần xác nhận mức hưởng.');
  if(!scoresReady&&!(errors!==null&&errors>=2))warnings.push('Chưa có đủ 3 điểm chất lượng do BGĐ duyệt.');
  if(violations===null)warnings.push('Chưa xác nhận số biên bản trong tháng.');
- res.json({month,branch,config,metrics:{machines,insured,attachment,drop,bought,failed,machineRevenue:Number(sales.machine_revenue),insuranceRevenue:Number(sales.insurance_revenue)},calculation:{baseMachine,baseInsurance,inferredRate:inferred,rate,quality,qualityFactor,violationFactor,salary,kpi,employmentFactor,total},warnings,note:'Tạm tính theo dữ liệu Excel KiotViet; tỷ lệ rớt khách cần nhập/đối soát riêng vì Excel không ghi khách không mua.'});
+ res.json({month,branch,config,metrics:{machines,insured,projectedMachines,projectedInsured,forecastMultiplier,attachment,drop,bought,failed,machineRevenue:Number(sales.machine_revenue),insuranceRevenue:Number(sales.insurance_revenue)},calculation:{baseMachine,baseInsurance,inferredRate:inferred,rate,quality,qualityFactor,violationFactor,salary,kpi,employmentFactor,total},warnings,note:'Thưởng máy/BH theo dự kiến cuối tháng (tháng đã kết thúc dùng thực tế); tạm tính theo Excel KiotViet; tỷ lệ rớt khách cần nhập/đối soát riêng vì Excel không ghi khách không mua.'});
 }));
 app.post('/api/manager-payroll',auth,manager,wrap(async(req,res)=>{
  const b=req.body||{},month=String(b.month||''),branch=String(b.branch||'').trim();
