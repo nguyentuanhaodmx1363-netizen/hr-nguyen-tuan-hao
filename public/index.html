@@ -907,6 +907,24 @@ body{background:#f4f6fa;color:var(--ink)}body:before{display:none}
 #dashboard .rz-revenue-breakout .down,#dashboard #totalRevenueCompare .down{color:#d04462!important}
 @media(max-width:1050px){#dashboard .revenue-panel{grid-template-columns:repeat(2,minmax(0,1fr))!important}#dashboard .revenue-panel>.rz-total-tile{grid-column:1/-1!important}#dashboard .revenue-panel>.rz-revenue-breakout{grid-column:1/-1!important;grid-row:2!important}#dashboard .revenue-panel>#revenueKpiCard{grid-column:1!important;grid-row:3!important}#dashboard .revenue-panel>#insuranceKpiCard{grid-column:2!important;grid-row:3!important}#dashboard .revenue-panel>#comparePanel{grid-row:4!important}}
 @media(max-width:540px){#dashboard .revenue-panel{display:flex!important;flex-direction:column!important}#dashboard .revenue-panel>.rz-revenue-breakout{grid-template-columns:1fr!important}#dashboard .rz-revenue-breakout .revenue-line{padding:13px!important}#dashboard .rz-revenue-breakout .revenue-line b{font-size:22px!important}}
+</style><style id="rz-balanced-revenue-v2">
+/* Balanced revenue overview: exactly two even rows before other dashboard sections */
+@media(min-width:1051px){
+#dashboard .revenue-panel{display:grid!important;grid-template-columns:repeat(6,minmax(0,1fr))!important;gap:12px!important;align-items:stretch!important}
+#dashboard .revenue-panel>.rz-total-tile{grid-column:1/3!important;grid-row:1!important}
+#dashboard .revenue-panel>.rz-revenue-breakout{grid-column:3/7!important;grid-row:1!important;grid-template-columns:repeat(2,minmax(0,1fr))!important}
+#dashboard .revenue-panel>#revenueKpiCard{grid-column:1/4!important;grid-row:2!important}
+#dashboard .revenue-panel>#insuranceKpiCard{grid-column:4/7!important;grid-row:2!important}
+#dashboard .revenue-panel>#comparePanel{grid-column:1/-1!important;grid-row:3!important}
+}
+#dashboard .revenue-panel>.rz-total-tile,#dashboard .revenue-panel>.rz-revenue-breakout,#dashboard .revenue-panel>.rz-revenue-kpi{min-width:0!important}
+#dashboard .revenue-panel>.rz-revenue-kpi{display:flex!important;align-items:center!important;justify-content:center!important;gap:22px!important;min-height:155px!important;padding:16px!important}
+#dashboard .revenue-panel>.rz-revenue-kpi .rz-revenue-kpi-ring{flex:0 0 auto!important}
+#dashboard .revenue-panel>.rz-revenue-kpi .rz-revenue-kpi-label{font-size:12px!important}
+#dashboard .rz-revenue-breakout .revenue-line{height:100%!important;align-items:center!important}
+#dashboard .rz-revenue-breakout .revenue-meta{line-height:1.5!important}
+@media(max-width:1050px) and (min-width:541px){#dashboard .revenue-panel>#revenueKpiCard,#dashboard .revenue-panel>#insuranceKpiCard{min-height:145px!important}}
+@media(max-width:540px){#dashboard .revenue-panel>.rz-revenue-kpi{min-height:130px!important}}
 </style></head><body><style id="rz-login-v55-style">
 .rz-login-v55{width:min(460px,100%)!important;padding:34px!important;border-radius:22px!important;background:#fff!important;box-shadow:0 22px 70px rgba(95,57,155,.16)!important;border:1px solid #eadff8!important}
 .rz-login-v55 .rz-login-brand{text-align:center;margin-bottom:24px}.rz-login-v55 .brand{font-size:25px!important;margin:0!important;color:#2b2242!important}.rz-login-v55 .subbrand{color:#8a7d9c!important;letter-spacing:3px!important;font-size:10px!important;margin:4px 0 0!important}.rz-login-v55 h1{font-size:27px!important}.rz-login-v55 .field{margin:16px 0!important;color:#59476f!important;font-size:13px!important}.rz-login-v55 .field input{min-height:45px;background:#fcfaff!important;border:1px solid #e5d9f6!important}.rz-login-v55 .rz-password-wrap{width:100%;position:relative;display:flex;align-items:center}.rz-login-v55 .rz-password-wrap input{padding-right:78px!important}.rz-login-v55 .rz-eye{position:absolute!important;right:7px!important;top:50%!important;transform:translateY(-50%)!important;background:#f2e8ff!important;color:#6534aa!important;border:0!important;box-shadow:none!important;padding:8px 12px!important;width:auto!important;min-height:32px!important}.rz-login-v55 .rz-login-submit{width:100%!important;min-height:46px;background:linear-gradient(100deg,#9b55e8,#e65c9b)!important;color:white!important}.rz-login-v55 .rz-login-actions{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:12px!important;margin-top:15px!important;flex-wrap:wrap!important}.rz-login-v55 .rz-link-btn{background:transparent!important;border:0!important;box-shadow:none!important;color:#7838b9!important;padding:7px 2px!important;font-size:13px!important;font-weight:750!important}.rz-login-v55 .rz-auth-panel{margin-top:14px;padding:16px;background:#faf6ff;border:1px solid #e8daf9;border-radius:15px}.rz-login-v55 .rz-auth-panel.hidden{display:none!important}.rz-login-v55 .rz-build-tag{text-align:center;font-size:10px;color:#aa9cbb;margin-top:20px}.rz-login-v55 #loginError:empty{display:none}
