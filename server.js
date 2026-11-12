@@ -76,6 +76,13 @@ CREATE TABLE IF NOT EXISTS kiot_pay_classification (
  category TEXT NOT NULL CHECK(category IN ('large','accessory','tradein','insurance','exclude')),
  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+CREATE TABLE IF NOT EXISTS work_shifts (
+ employee_id BIGINT NOT NULL REFERENCES users(id),
+ work_date DATE NOT NULL,
+ shift_code TEXT NOT NULL CHECK (shift_code IN ('morning','evening','full','off')),
+ updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+ PRIMARY KEY(employee_id,work_date)
+);
 CREATE TABLE IF NOT EXISTS payroll_staff (
  employee_name TEXT PRIMARY KEY, hire_date DATE, base_salary BIGINT NOT NULL DEFAULT 0,
  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -145,6 +152,32 @@ const auth = wrap(async (req, res, next) => {
   }
 });
 const manager = (req, res, next) => req.user.role === 'manager' ? next() : res.status(403).json({ error: 'Bạn không có quyền thực hiện' });
+
+
+const RZ_SHIFT_NAMES={morning:'08:30–17:30',evening:'12:30–21:30',full:'08:30–21:30',off:'Nghỉ'};
+app.get('/api/work-shifts',auth,wrap(async(req,res)=>{
+ const from=String(req.query.from||''),to=String(req.query.to||'');
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(from)||!/^\d{4}-\d{2}-\d{2}$/.test(to)||from>to||((Date.parse(to)-Date.parse(from))/86400000)>62)
+  return res.status(400).json({error:'Chọn khoảng ngày hợp lệ, tối đa 63 ngày'});
+ const isManager=req.user.role==='manager';
+ const [employees,shifts]=await Promise.all([
+  q("SELECT id,display_name FROM users WHERE role='employee' AND active=1 ORDER BY display_name"),
+  isManager?q("SELECT employee_id,to_char(work_date,'YYYY-MM-DD') AS work_date,shift_code FROM work_shifts WHERE work_date BETWEEN $1 AND $2 ORDER BY work_date",[from,to]):
+   q("SELECT employee_id,to_char(work_date,'YYYY-MM-DD') AS work_date,shift_code FROM work_shifts WHERE work_date BETWEEN $1 AND $2 AND employee_id=$3 ORDER BY work_date",[from,to,req.user.id])
+ ]);
+ res.json({employees:isManager?employees.rows:employees.rows.filter(x=>Number(x.id)===Number(req.user.id)),shifts:shifts.rows,shiftNames:RZ_SHIFT_NAMES,canEdit:isManager});
+}));
+app.put('/api/work-shifts',auth,manager,wrap(async(req,res)=>{
+ const employeeId=Number(req.body.employeeId),date=String(req.body.date||''),shift=String(req.body.shift||'');
+ if(!Number.isSafeInteger(employeeId)||employeeId<1||!/^\d{4}-\d{2}-\d{2}$/.test(date)||Number.isNaN(Date.parse(date))||!Object.hasOwn(RZ_SHIFT_NAMES,shift)&&shift!=='')
+  return res.status(400).json({error:'Dữ liệu ca làm không hợp lệ'});
+ const exists=await q("SELECT 1 FROM users WHERE id=$1 AND role='employee' AND active=1",[employeeId]);
+ if(!exists.rowCount)return res.status(404).json({error:'Không tìm thấy nhân viên đang hoạt động'});
+ if(shift)await q("INSERT INTO work_shifts(employee_id,work_date,shift_code) VALUES($1,$2,$3) ON CONFLICT(employee_id,work_date) DO UPDATE SET shift_code=EXCLUDED.shift_code,updated_at=NOW()",[employeeId,date,shift]);
+ else await q('DELETE FROM work_shifts WHERE employee_id=$1 AND work_date=$2',[employeeId,date]);
+ await log(req.user.id,'set_shift','work_shifts',employeeId,{date,shift});
+ res.json({ok:true});
+}));
 
 app.get('/api/health', wrap(async (req, res) => {
   await q('SELECT 1');
