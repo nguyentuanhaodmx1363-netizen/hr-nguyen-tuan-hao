@@ -1,0 +1,12 @@
+RENEW ZONE v7.0 - Nguồn dữ liệu Excel KiotViet
+
+1. Sao lưu mã nguồn GitHub trước khi cập nhật.
+2. Thay server.js, public/index.html, package.json; giữ nguyên DATABASE_URL, JWT_SECRET, Neon.
+3. Commit, chờ Render Live, mở ẩn danh.
+4. Vào KiotViet -> Tải Excel -> Xem trước -> Xác nhận nhập.
+5. Ngay bên dưới, ghép từng tên người bán KiotViet với tài khoản nhân viên RENEW ZONE, nhấn Lưu.
+6. Tổng quan, Chi tiết nhân viên, Lương thưởng nhân viên và lương quản lý lấy dữ liệu từ kiot_invoice_lines; dữ liệu nhập tay giữ để đối chiếu, không cộng chung.
+7. Excel KiotViet không ghi khách không mua hoặc nguồn máy trong/ngoài kho. Các chỉ số này không được suy đoán. Lương quản lý cần xác nhận mức hưởng kinh doanh nếu thiếu tỷ lệ rớt khách.
+8. Dữ liệu trong file đã nhập trước đây sẽ được dùng lại nếu còn trong Neon. Không cần tải lại nếu đã có dòng trong bảng.
+9. Kiểm tra kỹ số liệu với KiotViet trước khi chốt lương. Trường hợp hóa đơn đã sửa, trả hàng, đổi dòng sản phẩm cần đối soát lại, vì mã dòng nhập có thể thay đổi.
+10. Bản này đã kiểm tra cú pháp JavaScript và cấu trúc ZIP, chưa kiểm thử được kết nối Neon/Render thật.

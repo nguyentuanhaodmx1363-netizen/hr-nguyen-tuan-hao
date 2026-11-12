@@ -1,0 +1,6 @@
+RENEW ZONE v5.6 - Lương thưởng lấy dữ liệu nhân viên nhập.
+Thay CẢ public/index.html và server.js trên GitHub, commit và chờ Render Live.
+Dữ liệu KiotViet chỉ dùng đối soát.
+Khoản thu mua chưa có trường nhập riêng nên chưa tính hoa hồng thu mua.
+Lương cơ bản chỉ hiển thị trong tổng chi nhánh khi lọc tất cả chi nhánh, tránh cộng lặp giữa các chi nhánh.
+Kiểm tra số liệu trước khi chi trả.

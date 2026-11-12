@@ -1,0 +1,8 @@
+RENEW ZONE v7.4 - Phân chi nhánh theo người bán KiotViet
+Dương Quảng Hàm: Trần Hạ Vi, Nguyễn Ngọc Linh, Đoàn Thị Quỳnh Như.
+Kha Vạn Cân: Nguyễn Hoàng Huy, Nguyễn Vĩnh Kỳ, Trương Quang Huy.
+Tên khác: Chưa phân loại.
+Không cần nhập lại Excel: dữ liệu đã lưu được phân loại lại khi xem báo cáo.
+Thay server.js, public/index.html, package.json trên GitHub; Manual Deploy latest commit trên Render.
+Chọn Tất cả cửa hàng để xem tổng; chọn từng cửa hàng để xem riêng.
+Chưa kiểm thử trên database Neon thực tế.

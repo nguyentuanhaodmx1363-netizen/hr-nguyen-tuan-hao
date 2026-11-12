@@ -1,0 +1,10 @@
+RENEW ZONE v6.5 - Sua Chi tiet nhan vien
+
+1. Giai nen ZIP.
+2. Tren GitHub thay public/index.html bang file trong ZIP.
+3. Commit, cho Render Live va tai lai trang bang Ctrl+Shift+R.
+4. Vao Chi tiet nhan vien: tu dong chon nhan vien dau tien, hoac chon nhan vien khac; chon khoang ngay va bam Cap nhat.
+
+Ban nay sua luong hien thi phia giao dien: tai danh sach, tu dong chon nhan vien, hien trang thai va loi, khong can tai dashboard tong quan truoc.
+Du lieu van lay tu cac API /api/dashboard, /api/accessory-sales va /api/my-commission, nguon don nhan vien nhap. Khong thay doi co so du lieu, chinh sach luong hay server.js.
+Chua kiem thu voi co so du lieu Neon tren Render. Neu van loi, chup dong thong bao tai Chi tiet nhan vien hoac log Render.

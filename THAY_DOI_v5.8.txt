@@ -1,0 +1,5 @@
+RENEW ZONE v5.8
+- Bo 3 the KPI tren Tong quan: Du kien KPI may, Du kien KPI bao hiem, Don rot bao hiem.
+- Con 5 the, bo cuc tu dong can doi theo do rong man hinh.
+- Khong xoa du lieu va khong thay doi logic nhap don, luong thuong hay doi soat.
+Cap nhat: thay public/index.html tren GitHub, Commit, cho Render Live.

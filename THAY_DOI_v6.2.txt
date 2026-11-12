@@ -1,0 +1,1 @@
+v6.2: 5 KPI ở Tổng quan nằm cùng một hàng trên màn hình máy tính (>=901px); thu gọn vòng tròn và chữ ở màn hình vừa. Không đổi dữ liệu hay server.js.

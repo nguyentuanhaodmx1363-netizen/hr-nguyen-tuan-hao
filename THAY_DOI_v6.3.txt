@@ -1,0 +1,1 @@
+v6.3: Sua metricCards thanh 5 cot tren desktop va thu nho vong KPI. Khong doi logic hay server.

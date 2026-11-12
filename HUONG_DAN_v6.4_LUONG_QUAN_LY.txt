@@ -1,0 +1,28 @@
+RENEW ZONE v6.4 — BẢNG LƯƠNG QUẢN LÝ
+
+1. Cập nhật CẢ HAI file trên GitHub: server.js và public/index.html.
+2. Commit và đợi Render triển khai thành công (Live).
+3. Đăng nhập bằng tài khoản quản lý > Lương & thưởng > Bảng lương quản lý.
+4. Chọn tháng, phạm vi chi nhánh (hoặc toàn bộ), nhập công chuẩn, công thực tế,
+   điểm BGĐ, số lần báo cáo sai và biên bản đã xác minh, rồi bấm Lưu.
+5. Kiểm tra các cảnh báo trước khi dùng số tạm tính để chốt lương.
+
+CÁCH TÍNH:
+- Lương cứng 10.000.000đ/tháng đủ công, phân bổ theo ngày công.
+- Thưởng máy: >=250: 3tr, >=300: 6tr, >=350: 9tr, >=400: 13tr,
+  >=450: 17tr, >=500: 21tr (không cộng dồn).
+- Thưởng BH chỉ khi >=280 máy: 100-149: 5tr, 150-199: 7tr,
+  200-249: 10tr, 250-299: 13tr, >=300: 17tr.
+- KPI = (thưởng máy + thưởng BH) * mức hưởng kinh doanh * hệ số chất lượng
+  * hệ số biên bản.
+- Tổng tạm tính = (lương theo công + KPI) * 85% (thử việc) hoặc 100%.
+- Nếu BGĐ chưa duyệt điểm hoặc thiếu số biên bản, không tính ra tổng thu nhập.
+- Mức hưởng kinh doanh chưa bao phủ hết mọi tổ hợp tỷ lệ trong PDF;
+  có ô nhập mức hưởng do BGĐ xác nhận khi cần.
+- Chỉ lấy dữ liệu manual_sales và daily_stats nhân viên nhập, không lấy Kiot.
+
+CHÚ Ý:
+- Phần này được lưu theo tài khoản quản lý + tháng + phạm vi chi nhánh.
+- Chưa có chức năng chốt bảng lương có chữ ký; kết quả là TẠM TÍNH.
+- Đảm bảo dữ liệu bán hàng và khách hàng đã nhập đầy đủ, tránh đếm thiếu.
+- Lương chính thức và việc áp dụng biên bản cần được BGĐ/nhân sự kiểm tra.

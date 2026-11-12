@@ -1,0 +1,14 @@
+RENEW ZONE v7.1 - SỬA LỖI TRANG TRẮNG / NÚT KHÔNG PHẢN HỒI
+
+Đã xác định lỗi mã nguồn v7.0: giao diện xóa form CSV cũ nhưng JavaScript vẫn gọi $('#kiotForm').onsubmit. Phần tử không tồn tại gây TypeError, làm dừng quá trình khởi tạo các xử lý phía sau.
+
+Đã xóa đoạn gọi form CSV cũ. Giữ nguyên form tải Excel KiotViet, API nhập Excel, dữ liệu KiotViet, ghép tên nhân viên, báo cáo và lương thưởng.
+
+CẬP NHẬT:
+1. Sao lưu mã nguồn trên GitHub.
+2. Từ ZIP này thay đúng public/index.html trong repo. Các file server.js và package.json đi kèm để đồng bộ phiên bản nếu cần.
+3. Commit changes. Kiểm tra Render đã triển khai đúng commit và báo Live.
+4. Mở cửa sổ ẩn danh hoặc nhấn Cmd+Shift+R trên Mac.
+5. Vào KiotViet, chọn Excel, Xem trước, rồi Xác nhận nhập dữ liệu. Kiểm tra kết quả và ghép nhân viên.
+
+Lưu ý: Đã kiểm tra cú pháp JavaScript server và trình duyệt; chưa kiểm thử trên tài khoản Render/Neon thực tế.

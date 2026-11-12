@@ -1,0 +1,3 @@
+v5.9: Vòng KPI BẢO HIỂM trên Tổng quan tính theo DOANH THU BẢO HIỂM / KPI DOANH THU BẢO HIỂM.
+Vào Quản trị & KPI → Đặt KPI tháng cho cửa hàng, nhập mục tiêu doanh thu bảo hiểm (VNĐ).
+KPI số gói bảo hiểm vẫn giữ cho các phần khác. Cập nhật cả server.js và public/index.html.

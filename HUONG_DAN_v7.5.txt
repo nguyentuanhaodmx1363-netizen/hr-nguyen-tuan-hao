@@ -1,0 +1,3 @@
+RENEW ZONE v7.5 - Sua loi SQL PostgreSQL 42601 near day.
+Thay server.js tren GitHub, commit, Render > Manual Deploy > Deploy latest commit.
+Khong can nhap lai Excel KiotViet.

@@ -1,0 +1,1 @@
+v6.1: Can lai 5 the KPI Tong quan. Man hinh lon: 5 the 1 hang; trung binh: 3+2 the can giua; nho: 2+2+1; dien thoai: 1 cot. Khong thay doi du lieu, cong thuc hay server.js.

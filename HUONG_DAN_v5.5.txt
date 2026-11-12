@@ -1,0 +1,10 @@
+RENEW ZONE v5.5 — DANG NHAP / MAT KHAU
+
+1. GitHub: thay public/index.html VA server.js bang hai file trong ZIP, tren nhanh Render dang deploy.
+2. Commit changes, vao Render > Events doi trang thai Live.
+3. Mo tab an danh (Ctrl+Shift+N) va vao trang web. Cuoi khung dang nhap phai co chu Giao dien dang nhap v5.5.
+4. Bam Hien/An tai o mat khau. Bam Doi mat khau / Quen mat khau? de mo form.
+5. Chuc nang Quen mat khau chi hoat dong neu Render Environment da co MANAGER_RECOVERY_CODE dai it nhat 20 ky tu. Khong chia se ma nay.
+6. Neu khong thay dong v5.5: Render chua deploy dung commit/branch/repository, khong phai loi nut.
+
+Luu y: Chua kiem thu voi Render/Neon thuc te.

@@ -7,6 +7,7 @@ const cookieParser = require('cookie-parser');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const multer = require('multer');
+const XLSX = require('xlsx');
 const fs = require('fs');
 const path = require('path');
 
@@ -61,6 +62,14 @@ CREATE TABLE IF NOT EXISTS kiot_sales (
  quantity INTEGER NOT NULL DEFAULT 1, branch TEXT NOT NULL DEFAULT '', raw_json TEXT NOT NULL DEFAULT '{}',
  imported_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+CREATE TABLE IF NOT EXISTS kiot_invoice_lines (
+ invoice_code TEXT NOT NULL, line_key TEXT NOT NULL, sale_date DATE NOT NULL, employee_name TEXT NOT NULL, branch TEXT NOT NULL, product_code TEXT NOT NULL DEFAULT '', product_name TEXT NOT NULL DEFAULT '', category TEXT NOT NULL, quantity NUMERIC(12,2) NOT NULL DEFAULT 0, amount BIGINT NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT '', raw_json JSONB NOT NULL DEFAULT '{}'::jsonb, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY(invoice_code,line_key)
+);
+CREATE INDEX IF NOT EXISTS idx_kiot_invoice_lines_date ON kiot_invoice_lines(sale_date);
+CREATE TABLE IF NOT EXISTS kiot_employee_map (
+ kiot_name TEXT PRIMARY KEY, employee_id BIGINT NOT NULL REFERENCES users(id),
+ updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 CREATE TABLE IF NOT EXISTS kiot_pay_classification (
  kiot_id BIGINT PRIMARY KEY REFERENCES kiot_sales(id) ON DELETE CASCADE,
  category TEXT NOT NULL CHECK(category IN ('large','accessory','tradein','insurance','exclude')),
@@ -69,6 +78,14 @@ CREATE TABLE IF NOT EXISTS kiot_pay_classification (
 CREATE TABLE IF NOT EXISTS payroll_staff (
  employee_name TEXT PRIMARY KEY, hire_date DATE, base_salary BIGINT NOT NULL DEFAULT 0,
  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS manager_payroll (
+ manager_id BIGINT NOT NULL REFERENCES users(id), month TEXT NOT NULL, branch TEXT NOT NULL DEFAULT '',
+ standard_days NUMERIC(7,2), worked_days NUMERIC(7,2), probation BOOLEAN NOT NULL DEFAULT FALSE,
+ store_score NUMERIC(6,2), operations_score NUMERIC(6,2), service_score NUMERIC(6,2),
+ report_errors INTEGER, violations INTEGER, business_rate_override NUMERIC(5,2),
+ note TEXT NOT NULL DEFAULT '', updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ PRIMARY KEY(manager_id, month, branch)
 );
 CREATE TABLE IF NOT EXISTS audit_log (
  id BIGSERIAL PRIMARY KEY, actor_id BIGINT REFERENCES users(id), action TEXT NOT NULL,
@@ -85,6 +102,7 @@ CREATE TABLE IF NOT EXISTS branch_kpis (
  UNIQUE(branch, month)
 );
 ALTER TABLE branch_kpis ADD COLUMN IF NOT EXISTS revenue_target NUMERIC(18,0) NOT NULL DEFAULT 0;
+ALTER TABLE branch_kpis ADD COLUMN IF NOT EXISTS insurance_revenue_target NUMERIC(18,0) NOT NULL DEFAULT 0;
 CREATE INDEX IF NOT EXISTS idx_manual_sales_date ON manual_sales(sale_date);
 CREATE INDEX IF NOT EXISTS idx_daily_stats_date ON daily_stats(work_date);
 CREATE INDEX IF NOT EXISTS idx_kiot_sales_date ON kiot_sales(sale_date);
@@ -316,8 +334,8 @@ app.get('/api/my-commission',auth,wrap(async(req,res)=>{
  const target=req.user.role==='manager'&&req.query.employeeId ? Number(req.query.employeeId) : req.user.id;
  if(!Number.isSafeInteger(target)||target<1)return res.status(400).json({error:'Nhân viên không hợp lệ'});
  if(req.user.role==='manager'&&req.query.employeeId&&!(await q("SELECT 1 FROM users WHERE id=$1 AND role='employee'",[target])).rowCount)return res.status(404).json({error:'Không tìm thấy nhân viên'});
- const sales=(await q(`SELECT sale_date::text AS day,COUNT(*)::int AS machines,COALESCE(SUM(insurance),0)::int AS insured,COALESCE(SUM(insurance_revenue),0)::bigint AS insurance_revenue FROM manual_sales WHERE employee_id=$1 AND sale_date BETWEEN $2 AND $3 GROUP BY sale_date`,[target,from,to])).rows;
- const accessories=(await q(`SELECT sale_date::text AS day,COALESCE(SUM(CASE WHEN amount>0 THEN quantity ELSE 0 END),0)::int AS accessories FROM accessory_sales WHERE employee_id=$1 AND sale_date BETWEEN $2 AND $3 GROUP BY sale_date`,[target,from,to])).rows;
+ const sales=(await q(`SELECT sale_date::text AS "day",COUNT(*)::int AS machines,COALESCE(SUM(insurance),0)::int AS insured,COALESCE(SUM(insurance_revenue),0)::bigint AS insurance_revenue FROM manual_sales WHERE employee_id=$1 AND sale_date BETWEEN $2 AND $3 GROUP BY sale_date`,[target,from,to])).rows;
+ const accessories=(await q(`SELECT sale_date::text AS "day",COALESCE(SUM(CASE WHEN amount>0 THEN quantity ELSE 0 END),0)::int AS accessories FROM accessory_sales WHERE employee_id=$1 AND sale_date BETWEEN $2 AND $3 GROUP BY sale_date`,[target,from,to])).rows;
  // Month-based insurance commission rate; query only current month when called for the monthly forecast.
  const month=to.slice(0,7),monthStart=month+'-01',monthEnd=new Date(Date.UTC(Number(month.slice(0,4)),Number(month.slice(5,7)),0)).toISOString().slice(0,10);
  const monthly=(await q('SELECT COUNT(*)::int AS machines,COALESCE(SUM(insurance),0)::int AS insured FROM manual_sales WHERE employee_id=$1 AND sale_date BETWEEN $2 AND $3',[target,monthStart,monthEnd])).rows[0];
@@ -424,11 +442,12 @@ app.get('/api/kpi', auth, wrap(async (req, res) => {
 }));
 app.post('/api/branch-kpi', auth, manager, wrap(async (req,res)=>{
   const branch=String(req.body.branch||'').trim(), month=String(req.body.month||'');
-  const machineTarget=Math.max(0,Number(req.body.machineTarget)||0), insuranceTarget=Math.max(0,Number(req.body.insuranceTarget)||0), revenueTarget=Number(req.body.revenueTarget);
+  const machineTarget=Math.max(0,Number(req.body.machineTarget)||0), insuranceTarget=Math.max(0,Number(req.body.insuranceTarget)||0), revenueTarget=Number(req.body.revenueTarget), insuranceRevenueTarget=Number(req.body.insuranceRevenueTarget);
+  if(!Number.isSafeInteger(insuranceRevenueTarget)||insuranceRevenueTarget<0) return res.status(400).json({error:'KPI doanh thu bảo hiểm phải là số nguyên không âm.'});
   if(!Number.isSafeInteger(revenueTarget)||revenueTarget<0) return res.status(400).json({error:'KPI doanh thu phải là số nguyên không âm.'});
   if(!branch || !/^\d{4}-\d{2}$/.test(month)) return res.status(400).json({error:'Vui lòng chọn chi nhánh và tháng hợp lệ.'});
   if(!(await q('SELECT 1 FROM branches WHERE name=$1 AND active=1',[branch])).rowCount) return res.status(400).json({error:'Chi nhánh không hợp lệ.'});
-  await q(`INSERT INTO branch_kpis(branch,month,machine_target,insurance_target,revenue_target) VALUES($1,$2,$3,$4,$5) ON CONFLICT(branch,month) DO UPDATE SET machine_target=EXCLUDED.machine_target,insurance_target=EXCLUDED.insurance_target,revenue_target=EXCLUDED.revenue_target`,[branch,month,machineTarget,insuranceTarget,revenueTarget]);
+  await q(`INSERT INTO branch_kpis(branch,month,machine_target,insurance_target,revenue_target,insurance_revenue_target) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(branch,month) DO UPDATE SET machine_target=EXCLUDED.machine_target,insurance_target=EXCLUDED.insurance_target,revenue_target=EXCLUDED.revenue_target,insurance_revenue_target=EXCLUDED.insurance_revenue_target`,[branch,month,machineTarget,insuranceTarget,revenueTarget,insuranceRevenueTarget]);
   await log(req.user.id,'upsert','branch_kpi',null,req.body); res.json({ok:true});
 }));
 app.get('/api/branch-kpi', auth, manager, wrap(async (req,res)=>{
@@ -484,95 +503,261 @@ app.post('/api/kiot/import', auth, manager, upload.single('file'), wrap(async (r
     if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
   }
 }));
+// Import actual KiotViet invoice-detail XLSX: each row is a product line, not a new invoice.
+const kiotNorm = v => String(v ?? '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'d').replace(/\s+/g,' ');
+function kiotCategory(group,code,name){
+ const g=kiotNorm(group), c=kiotNorm(code), n=kiotNorm(name);
+ if(g.includes('goi bao hanh') || (g.includes('bao hanh') && !g.includes('linh kien')) || c.startsWith('bh') || n.includes('goi bao hanh'))return 'insurance';
+ if(g.includes('phu kien'))return 'accessory';
+ // MacBook and iPad are counted as sold devices, even when KiotViet groups them under 'SẢN PHẨM KHÁC'.
+ if(g.includes('macbook') || g.includes('ipad') || /\b(macbook|ipad)\b/.test(n))return 'machine';
+ if((g.includes('may') || g.includes('iphone') || g.includes('newseal') || g.includes('like new') || g.includes('thanh ly')) && !g.includes('sua chua'))return 'machine';
+ return 'other'; // Review rather than invent a machine/insurance classification.
+}
+function kiotRowsFromXlsx(file){
+ const book=XLSX.readFile(file,{cellDates:true,raw:true});
+ const sheet=book.Sheets[book.SheetNames[0]];
+ if(!sheet)throw Error('File Excel không có trang dữ liệu');
+ const rows=XLSX.utils.sheet_to_json(sheet,{defval:'',raw:true});
+ if(!rows.length)throw Error('File Excel không có dòng hàng');
+ const keys=Object.keys(rows[0]);
+ const key=(n)=>keys.find(k=>kiotNorm(k)===kiotNorm(n));
+ for(const col of ['Mã hóa đơn','Thời gian','Người bán','Nhóm hàng','Mã hàng','Tên hàng','Số lượng','Thành tiền','Trạng thái'])if(!key(col))throw Error('Thiếu cột KiotViet: '+col);
+ const get=(r,n)=>r[key(n)];
+ const duplicates=new Map();let ignored=0;
+ const parsed=[];
+ for(const r of rows){
+  const invoice=String(get(r,'Mã hóa đơn')||'').trim();if(!invoice){ignored++;continue}
+  const rawDate=get(r,'Thời gian');let d=rawDate instanceof Date?rawDate:new Date(rawDate);
+  if(!Number.isFinite(d.getTime())){ignored++;continue}
+  const date=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  const productCode=String(get(r,'Mã hàng')||'').trim(),productName=String(get(r,'Tên hàng')||'').trim();
+  const imei=String(get(r,'IMEI')||'').trim();
+  const qty=Number(get(r,'Số lượng')||0),amount=Math.round(Number(get(r,'Thành tiền')||0));
+  const base=[productCode,imei,qty,amount,productName].join('|');
+  const dupKey=invoice+'|'+base;const occurrence=(duplicates.get(dupKey)||0)+1;duplicates.set(dupKey,occurrence);
+  parsed.push({invoice,lineKey:require('crypto').createHash('sha256').update(base+'|'+occurrence).digest('hex'),date,
+   employee:String(get(r,'Người bán')||'').trim(),branch:String(get(r,'Chi nhánh')||'').trim(),productCode,productName,
+   category:kiotCategory(get(r,'Nhóm hàng'),productCode,productName),qty,amount,status:String(get(r,'Trạng thái')||'').trim(),raw:r});
+ }
+ return {rows:parsed,ignored};
+}
+app.post('/api/kiot/xlsx-preview',auth,manager,upload.single('file'),wrap(async(req,res)=>{
+ if(!req.file)return res.status(400).json({error:'Chưa chọn Excel'});
+ try{
+  const {rows,ignored}=kiotRowsFromXlsx(req.file.path);const valid=rows.filter(r=>kiotNorm(r.status)==='hoan thanh');
+  const byCategory={};for(const r of valid){if(!byCategory[r.category])byCategory[r.category]={rows:0,qty:0,revenue:0};byCategory[r.category].rows++;byCategory[r.category].qty+=r.qty;byCategory[r.category].revenue+=r.amount}
+  res.json({rows:rows.length,ignored,invoices:new Set(rows.map(r=>r.invoice)).size,valid:valid.length,byCategory,excluded:rows.length-valid.length,employees:[...new Set(rows.map(r=>r.employee))].filter(Boolean).sort()});
+ }finally{fs.unlinkSync(req.file.path)}
+}));
+app.post('/api/kiot/xlsx-import',auth,manager,upload.single('file'),wrap(async(req,res)=>{
+ if(!req.file)return res.status(400).json({error:'Chưa chọn Excel'});
+ let client;
+ try{
+  const {rows,ignored}=kiotRowsFromXlsx(req.file.path);
+  client=await pool.connect();await client.query('BEGIN');let inserted=0,updated=0;
+  for(const r of rows){
+   const exists=await client.query('SELECT 1 FROM kiot_invoice_lines WHERE invoice_code=$1 AND line_key=$2',[r.invoice,r.lineKey]);
+   await client.query(`INSERT INTO kiot_invoice_lines(invoice_code,line_key,sale_date,employee_name,branch,product_code,product_name,category,quantity,amount,status,raw_json)
+   VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+   ON CONFLICT(invoice_code,line_key) DO UPDATE SET sale_date=EXCLUDED.sale_date,employee_name=EXCLUDED.employee_name,branch=EXCLUDED.branch,product_name=EXCLUDED.product_name,category=EXCLUDED.category,quantity=EXCLUDED.quantity,amount=EXCLUDED.amount,status=EXCLUDED.status,raw_json=EXCLUDED.raw_json,updated_at=NOW()`,
+   [r.invoice,r.lineKey,r.date,r.employee,r.branch,r.productCode,r.productName,r.category,r.qty,r.amount,r.status,JSON.stringify(r.raw)]);
+   if(exists.rowCount)updated++;else inserted++;
+  }
+  await client.query('COMMIT');res.json({ok:true,inserted,updated,ignored,total:rows.length});
+ }catch(e){if(client)await client.query('ROLLBACK');throw e}
+ finally{if(client)client.release();fs.unlinkSync(req.file.path)}
+}));
+// KiotViet employee mapping is manager-controlled; unmatched sellers remain visible for review.
+app.get('/api/kiot/employee-mapping',auth,manager,wrap(async(req,res)=>{
+ const [names,users,mappings]=await Promise.all([
+  q("SELECT DISTINCT employee_name AS name FROM kiot_invoice_lines WHERE employee_name<>'' ORDER BY employee_name"),
+  q("SELECT id,display_name FROM users WHERE role='employee' AND active=1 ORDER BY display_name"),
+  q('SELECT kiot_name,employee_id FROM kiot_employee_map')]);
+ res.json({names:names.rows.map(x=>x.name),users:users.rows,mappings:mappings.rows});
+}));
+app.post('/api/kiot/employee-mapping',auth,manager,wrap(async(req,res)=>{
+ const name=String(req.body.kiotName||'').trim(),id=Number(req.body.employeeId);
+ if(!name||name.length>150)return res.status(400).json({error:'Tên KiotViet không hợp lệ'});
+ if(!id){await q('DELETE FROM kiot_employee_map WHERE kiot_name=$1',[name]);return res.json({ok:true})}
+ const u=await q("SELECT id FROM users WHERE id=$1 AND role='employee' AND active=1",[id]);
+ if(!u.rowCount)return res.status(400).json({error:'Tài khoản nhân viên không hợp lệ'});
+ await q('INSERT INTO kiot_employee_map(kiot_name,employee_id) VALUES($1,$2) ON CONFLICT(kiot_name) DO UPDATE SET employee_id=EXCLUDED.employee_id,updated_at=NOW()',[name,id]);
+ res.json({ok:true});
+}));
+// KiotViet exports both shops as "Chi nhánh trung tâm". Determine the real shop by seller.
+// Unknown sellers are explicitly unassigned, never silently credited to a shop.
+const RZ_KIOT_BRANCH_SQL = `CASE
+ WHEN lower(trim(l.employee_name)) IN (lower('Trần Hạ Vi'),lower('Nguyễn Ngọc Linh'),lower('Đoàn Thị Quỳnh Như'),lower('Nguyễn Hoàng Huy'),lower('Trương Quang Huy')) THEN 'Dương Quảng Hàm'
+ WHEN lower(trim(l.employee_name)) IN (lower('Nguyễn Vĩnh Kỳ')) THEN 'Kha Vạn Cân'
+ ELSE 'Chưa phân loại' END`;
+async function rzKiotAggregate(from,to,branch='',employeeId=null){
+ // Keep date alias unambiguous and classify the exported central branch by seller.
+ // The inner query computes branch once, avoiding repeated CASE expressions in GROUP BY.
+ const result=await q(`
+  SELECT sale_day AS "day",branch,employee_name,employee_id,category,
+         SUM(quantity)::float AS qty,SUM(amount)::bigint AS revenue,
+         COUNT(DISTINCT invoice_code)::int AS invoices
+  FROM (
+    SELECT l.sale_date::text AS sale_day,
+           ${RZ_KIOT_BRANCH_SQL} AS branch,
+           l.employee_name,m.employee_id,
+           CASE WHEN l.category='other' AND (lower(l.product_name) LIKE 'macbook%' OR lower(l.product_name) LIKE 'ipad%')
+                THEN 'machine' ELSE l.category END AS category,
+           l.quantity,l.amount,l.invoice_code
+    FROM kiot_invoice_lines AS l
+    LEFT JOIN kiot_employee_map AS m ON m.kiot_name=l.employee_name
+    WHERE l.sale_date BETWEEN $1 AND $2
+      AND lower(trim(l.status)) IN ('hoàn thành','hoan thanh')
+  ) AS sales
+  WHERE ($3::text='' OR branch=$3::text)
+    AND ($4::bigint IS NULL OR employee_id=$4::bigint)
+  GROUP BY sale_day,branch,employee_name,employee_id,category
+ `,[from,to,branch,employeeId]);
+ return result.rows;
+}
+function rzSummarizeKiot(lines){
+ const t={machines:0,machineRevenue:0,insured:0,insuranceRevenue:0,accessoryRevenue:0,accessories:0,dropped:0,customers:0,successful:0,failed:0,inStock:0,outsideStock:0,liquidation:0,newSuper:0,grade99:0};
+ for(const x of lines){const n=Number(x.qty||0),v=Number(x.revenue||0);
+  if(x.category==='machine'){t.machines+=n;t.machineRevenue+=v}
+  if(x.category==='insurance'&&v>0){t.insured+=n;t.insuranceRevenue+=v}
+  if(x.category==='accessory'&&v>0){t.accessories+=n;t.accessoryRevenue+=v}
+ }
+ t.insuranceRate=t.machines?t.insured/t.machines*100:0;
+ t.dropRate=0;t.closeRate=0;t.totalRevenue=t.machineRevenue+t.insuranceRevenue;
+ return t;
+}
+app.get('/api/kiot/import-summary',auth,manager,wrap(async(req,res)=>{
+ const r=await q(`SELECT COUNT(*)::int lines,COUNT(DISTINCT invoice_code)::int invoices,
+ MIN(sale_date)::text first_date,MAX(sale_date)::text last_date,
+ COUNT(*) FILTER (WHERE category='machine')::int machine_lines,
+ COUNT(*) FILTER (WHERE category='insurance')::int insurance_lines,
+ COUNT(*) FILTER (WHERE category='other')::int other_lines
+ FROM kiot_invoice_lines WHERE lower(trim(status)) IN ('hoàn thành','hoan thanh')`);
+ const branches=await q(`SELECT ${RZ_KIOT_BRANCH_SQL} AS branch,COUNT(*)::int lines FROM kiot_invoice_lines l GROUP BY ${RZ_KIOT_BRANCH_SQL} ORDER BY branch`);
+ res.json({...r.rows[0],branches:branches.rows,source:'kiot_xlsx'});
+}));
+app.get('/api/kiot/employee-daily',auth,wrap(async(req,res)=>{
+ const from=String(req.query.from||new Date().toISOString().slice(0,10)),to=String(req.query.to||from);
+ const employeeId=req.user.role==='manager'?Number(req.query.employeeId||0):Number(req.user.id);
+ if(!employeeId)return res.status(400).json({error:'Chưa chọn nhân viên'});
+ const lines=await rzKiotAggregate(from,to,'',employeeId),byDate=new Map();
+ for(const r of lines){if(!byDate.has(r.day))byDate.set(r.day,{date:r.day,machines:0,insured:0,accessories:0,machineCommission:0,insuranceCommission:0,accessoryCommission:0,total:0,insuranceRevenue:0});
+  const x=byDate.get(r.day),qty=Number(r.qty||0),amount=Number(r.revenue||0);
+  if(r.category==='machine'){x.machines+=qty;x.machineCommission+=qty*30000}
+  if(r.category==='insurance'&&amount>0){x.insured+=qty;x.insuranceRevenue+=amount}
+  if(r.category==='accessory'&&amount>0){x.accessories+=qty;x.accessoryCommission+=qty*15000}
+ }
+ const days=[...byDate.values()].sort((a,b)=>a.date.localeCompare(b.date));
+ const totalMachines=days.reduce((n,x)=>n+x.machines,0),totalInsurance=days.reduce((n,x)=>n+x.insured,0);
+ const rate=totalMachines&&totalInsurance/totalMachines>=0.65?.10:.08;
+ for(const x of days){x.insuranceCommission=Math.round(x.insuranceRevenue*rate);x.total=x.machineCommission+x.insuranceCommission+x.accessoryCommission}
+ res.json({days,total:days.reduce((n,x)=>n+x.total,0),source:'kiot_xlsx',rate});
+}));
+app.get('/api/kiot/lines',auth,manager,wrap(async(req,res)=>{
+ const from=String(req.query.from||'2000-01-01'),to=String(req.query.to||'2999-12-31');
+ const result=await q(`SELECT l.sale_date::text,l.invoice_code,l.employee_name,${RZ_KIOT_BRANCH_SQL} AS branch,l.product_name,l.quantity,l.amount,l.status
+ FROM kiot_invoice_lines l WHERE l.sale_date BETWEEN $1 AND $2 ORDER BY sale_date DESC,invoice_code DESC LIMIT 500`,[from,to]);
+ res.json(result.rows);
+}));
 app.get('/api/branches', auth, wrap(async (req,res)=>{ const r=await q('SELECT name FROM branches WHERE active=1 ORDER BY name'); res.json(r.rows.map(x=>x.name)); }));
 app.post('/api/branches', auth, manager, wrap(async (req,res)=>{ const name=String(req.body.name||'').trim(); if(!name || name.length>80) return res.status(400).json({error:'Tên chi nhánh không hợp lệ (tối đa 80 ký tự)'}); try { const r=await q('INSERT INTO branches(name) VALUES($1) RETURNING id,name',[name]); await log(req.user.id,'create','branch',r.rows[0].id,{name}); res.json(r.rows[0]); } catch(e) { if(e.code==='23505') return res.status(400).json({error:'Chi nhánh này đã tồn tại'}); throw e; } }));
 app.get('/api/kiot/branches', auth, manager, wrap(async (req, res) => {
-  const r = await q("SELECT DISTINCT branch FROM kiot_sales WHERE branch<>'' ORDER BY branch");
-  res.json(r.rows.map(x => x.branch));
+  res.json(['Dương Quảng Hàm','Kha Vạn Cân','Chưa phân loại']);
 }));
 app.get('/api/kiot/sales', auth, manager, wrap(async (req, res) => {
   const r = await q('SELECT * FROM kiot_sales WHERE sale_date BETWEEN $1 AND $2 ORDER BY sale_date DESC', [req.query.from || '2000-01-01', req.query.to || '2999-12-31']);
   res.json(r.rows);
 }));
 
-app.get('/api/dashboard', auth, wrap(async (req, res) => {
-  const from = req.query.from || new Date().toISOString().slice(0, 10), to = req.query.to || from;
-  const compareFrom = req.query.compareFrom, compareTo = req.query.compareTo;
-  const empFilter = req.user.role === 'manager' ? (req.query.employeeId ? Number(req.query.employeeId) : null) : Number(req.user.id);
-  const empSql = empFilter ? ' AND employee_id=$3' : '';
-  const branch = String(req.query.branch || '');
-  const branchSqlSales = branch ? ` AND branch=$${empFilter ? 4 : 3}` : '';
-  const args = [from, to, ...(empFilter ? [empFilter] : []), ...(branch ? [branch] : [])];
-  const salesR = await q(`SELECT employee_id,COUNT(*) machines,SUM(price) machine_revenue,SUM(insurance) insured,
-    SUM(insurance_revenue) insurance_revenue,SUM(CASE WHEN insurance=0 THEN 1 ELSE 0 END) dropped,
-    SUM(CASE WHEN stock_source='Trong kho' THEN 1 ELSE 0 END) in_stock,
-    SUM(CASE WHEN stock_source='Máy ngoài' THEN 1 ELSE 0 END) outside_stock,
-    SUM(CASE WHEN condition_type='Thanh lý' THEN 1 ELSE 0 END) liquidation,
-    SUM(CASE WHEN condition_type='New siêu' THEN 1 ELSE 0 END) new_super,
-    SUM(CASE WHEN condition_type='99%' THEN 1 ELSE 0 END) grade99
-    FROM manual_sales WHERE sale_date BETWEEN $1 AND $2${empSql}${branchSqlSales} GROUP BY employee_id`, args);
-  const statsR = await q(`SELECT employee_id,SUM(customers) customers,SUM(successful) successful,SUM(failed) failed
-    FROM daily_stats WHERE work_date BETWEEN $1 AND $2${empSql}${branch ? ` AND branch=$${empFilter ? 4 : 3}` : ''} GROUP BY employee_id`, args);
-  const kiotR = req.user.role === 'manager' ? await q('SELECT employee_name,COUNT(*) rows_count,SUM(quantity) machines,SUM(price) revenue FROM kiot_sales WHERE sale_date BETWEEN $1 AND $2 GROUP BY employee_name', [from, to]) : { rows: [] };
-  const usersR = req.user.role === 'manager' ? await q("SELECT id,display_name FROM users WHERE role='employee' AND active=1 ORDER BY display_name") : await q("SELECT id,display_name FROM users WHERE id=$1 AND active=1",[req.user.id]);
-  const users = usersR.rows.filter(u => !empFilter || Number(u.id) === Number(empFilter));
-  const enrich = list => users.map(u => {
-    const s = list.find(x => Number(x.employee_id) === Number(u.id)) || {};
-    const st = statsR.rows.find(x => Number(x.employee_id) === Number(u.id)) || {};
-    const machines = Number(s.machines || 0), insured = Number(s.insured || 0), customers = Number(st.customers || 0), successful = Number(st.successful || 0);
-    return { employeeId: Number(u.id), name: u.display_name, machines, machineRevenue: Number(s.machine_revenue || 0), insured,
-      insuranceRevenue: Number(s.insurance_revenue || 0), dropped: Number(s.dropped || 0), insuranceRate: machines ? insured / machines * 100 : 0,
-      dropRate: machines ? Number(s.dropped || 0) / machines * 100 : 0, customers, successful, failed: Number(st.failed || 0),
-      closeRate: customers ? successful / customers * 100 : 0, inStock: Number(s.in_stock || 0), outsideStock: Number(s.outside_stock || 0),
-      liquidation: Number(s.liquidation || 0), newSuper: Number(s.new_super || 0), grade99: Number(s.grade99 || 0) };
-  });
-  const rows = enrich(salesR.rows);
-  const keys = ['machines','machineRevenue','insured','insuranceRevenue','dropped','customers','successful','failed','inStock','outsideStock','liquidation','newSuper','grade99'];
-  const total = rows.reduce((a, r) => { for (const k of keys) a[k] += r[k]; return a; }, Object.fromEntries(keys.map(k => [k, 0])));
-  total.insuranceRate = total.machines ? total.insured / total.machines * 100 : 0;
-  total.dropRate = total.machines ? total.dropped / total.machines * 100 : 0;
-  total.closeRate = total.customers ? total.successful / total.customers * 100 : 0;
-  let comparison = null;
-  if (compareFrom && compareTo) {
-    const cArgs = [compareFrom, compareTo, ...(empFilter ? [empFilter] : []), ...(branch ? [branch] : [])];
-    const cmR = await q(`SELECT COUNT(*) machines,SUM(price) "machineRevenue",SUM(insurance) insured,SUM(insurance_revenue) "insuranceRevenue" FROM manual_sales WHERE sale_date BETWEEN $1 AND $2${empSql}${branchSqlSales}`, cArgs);
-    const csR = await q(`SELECT SUM(customers) customers,SUM(successful) successful,SUM(failed) failed FROM daily_stats WHERE work_date BETWEEN $1 AND $2${empSql}${branch ? ` AND branch=$${empFilter ? 4 : 3}` : ''}`, cArgs);
-    const cm = cmR.rows[0], cs = csR.rows[0];
-    comparison = { machines: Number(cm.machines || 0), machineRevenue: Number(cm.machineRevenue || 0), insured: Number(cm.insured || 0), insuranceRevenue: Number(cm.insuranceRevenue || 0), customers: Number(cs.customers || 0), successful: Number(cs.successful || 0), failed: Number(cs.failed || 0) };
-    comparison.insuranceRate = comparison.machines ? comparison.insured / comparison.machines * 100 : 0;
-    comparison.closeRate = comparison.customers ? comparison.successful / comparison.customers * 100 : 0;
-  }
-  const kiotTotalsR = req.user.role === 'manager' ? await q('SELECT COUNT(*) orders,COALESCE(SUM(quantity),0) machines,COALESCE(SUM(price),0) revenue FROM kiot_sales WHERE sale_date BETWEEN $1 AND $2 AND ($3 = \'\' OR branch=$3)', [from, to, branch]) : {rows:[{orders:0,machines:0,revenue:0}]};
-  const kt = kiotTotalsR.rows[0];
-  const month = req.query.month || to.slice(0, 7);
-  const kpiSql = `SELECT k.*,u.display_name FROM kpis k JOIN users u ON u.id=k.employee_id WHERE k.month=$1${empFilter ? ' AND k.employee_id=$2' : ''}`;
-  const kpiRows = (await q(kpiSql, empFilter ? [month, empFilter] : [month])).rows;
-  const actualSql = `SELECT employee_id,COUNT(*) machines,SUM(insurance) insured FROM manual_sales WHERE sale_date >= $1 AND sale_date < $2${empFilter ? ' AND employee_id=$3' : ''} GROUP BY employee_id`;
-  const [yy, mm] = month.split('-').map(Number); const nextMonth = `${mm === 12 ? yy + 1 : yy}-${String(mm === 12 ? 1 : mm + 1).padStart(2, '0')}-01`;
-  const monthActual = (await q(actualSql, empFilter ? [`${month}-01`, nextMonth, empFilter] : [`${month}-01`, nextMonth])).rows;
-  const now = new Date(); const monthDays = new Date(yy, mm, 0).getDate(); const elapsed = month === now.toISOString().slice(0, 7) ? now.getDate() : monthDays;
-  const kpiProgress = kpiRows.map(k => {
-    const a = monthActual.find(x => Number(x.employee_id) === Number(k.employee_id)) || {};
-    const machines = Number(a.machines || 0), insured = Number(a.insured || 0);
-    return { employeeId: Number(k.employee_id), name: k.display_name, machineTarget: Number(k.machine_target), insuranceTarget: Number(k.insurance_target), machines, insured,
-      machineProgress: k.machine_target ? machines / Number(k.machine_target) * 100 : 0, insuranceProgress: k.insurance_target ? insured / Number(k.insurance_target) * 100 : 0,
-      machineForecast: elapsed ? machines / elapsed * monthDays : 0, insuranceForecast: elapsed ? insured / elapsed * monthDays : 0, month };
-  });
-  const trendArgs=[from,to,...(empFilter?[empFilter]:[]),...(branch?[branch]:[])]; const trendEmp=empFilter?' AND employee_id=$3':''; const trendBranch=branch?` AND branch=$${empFilter?4:3}`:'';
-  const trendSales=(await q(`SELECT sale_date::text AS "day",COUNT(*) machines,COALESCE(SUM(price),0) machine_revenue,COALESCE(SUM(insurance_revenue),0) insurance_revenue FROM manual_sales WHERE sale_date BETWEEN $1 AND $2${trendEmp}${trendBranch} GROUP BY sale_date ORDER BY sale_date`,trendArgs)).rows;
-  const trendCustomers=(await q(`SELECT work_date::text AS "day",COALESCE(SUM(customers),0) customers,COALESCE(SUM(successful),0) successful FROM daily_stats WHERE work_date BETWEEN $1 AND $2${trendEmp}${trendBranch} GROUP BY work_date`,trendArgs)).rows;
-  const trendMap=new Map(); for(const x of trendSales) trendMap.set(x.day,{date:x.day,machines:Number(x.machines),machineRevenue:Number(x.machine_revenue),insuranceRevenue:Number(x.insurance_revenue),customers:0,successful:0});
-  for(const x of trendCustomers){const v=trendMap.get(x.day)||{date:x.day,machines:0,machineRevenue:0,insuranceRevenue:0,customers:0,successful:0};v.customers=Number(x.customers);v.successful=Number(x.successful);trendMap.set(x.day,v)}
-  const branchSales=(await q(`SELECT branch,COUNT(*) machines,COALESCE(SUM(price),0) machine_revenue,COALESCE(SUM(insurance),0) insured,COALESCE(SUM(insurance_revenue),0) insurance_revenue,COUNT(*) FILTER (WHERE stock_source='Trong kho') in_stock,COUNT(*) FILTER (WHERE stock_source='Máy ngoài') outside_stock FROM manual_sales WHERE sale_date BETWEEN $1 AND $2${empSql}${branchSqlSales} GROUP BY branch`,[from,to,...(empFilter?[empFilter]:[]),...(branch?[branch]:[])])).rows;
-  const branchStats=(await q(`SELECT branch,COALESCE(SUM(customers),0) customers,COALESCE(SUM(successful),0) successful,COALESCE(SUM(failed),0) failed FROM daily_stats WHERE work_date BETWEEN $1 AND $2${empSql}${branch ? ` AND branch=$${empFilter?4:3}` : ''} GROUP BY branch`,[from,to,...(empFilter?[empFilter]:[]),...(branch?[branch]:[])])).rows;
-  const branchMap=new Map(); for(const x of branchSales)branchMap.set(x.branch,{branch:x.branch,machines:Number(x.machines),machineRevenue:Number(x.machine_revenue),insured:Number(x.insured),insuranceRevenue:Number(x.insurance_revenue),inStock:Number(x.in_stock),outsideStock:Number(x.outside_stock),customers:0,successful:0,failed:0});
-  for(const x of branchStats){const v=branchMap.get(x.branch)||{branch:x.branch,machines:0,machineRevenue:0,insured:0,insuranceRevenue:0,inStock:0,outsideStock:0,customers:0,successful:0,failed:0};v.customers=Number(x.customers);v.successful=Number(x.successful);v.failed=Number(x.failed);branchMap.set(x.branch,v)}
-  const branchSummary=[...branchMap.values()].map(x=>({...x,closeRate:x.customers?x.successful/x.customers*100:0,totalRevenue:x.machineRevenue+x.insuranceRevenue}));
-  const branchKpiRows=req.user.role==='manager'?(await q('SELECT * FROM branch_kpis WHERE month=$1'+(branch?' AND branch=$2':''),branch?[month,branch]:[month])).rows:[];
-  const branchMonthActual=(await q(`SELECT branch,COUNT(*) machines,COALESCE(SUM(insurance),0) insured,COALESCE(SUM(price),0)+COALESCE(SUM(insurance_revenue),0) revenue FROM manual_sales WHERE sale_date >= $1 AND sale_date < $2${branch?' AND branch=$3':''} GROUP BY branch`,branch?[`${month}-01`,nextMonth,branch]:[`${month}-01`,nextMonth])).rows;
-  const branchKpiProgress=branchKpiRows.map(k=>{const a=branchMonthActual.find(x=>x.branch===k.branch)||{};const machines=Number(a.machines||0),insured=Number(a.insured||0),revenue=Number(a.revenue||0),revenueTarget=Number(k.revenue_target||0);return {branch:k.branch,revenue,revenueTarget,revenueProgress:revenueTarget?revenue/revenueTarget*100:0,revenueForecast:elapsed?revenue/elapsed*monthDays:0,machineTarget:Number(k.machine_target),insuranceTarget:Number(k.insurance_target),machines,insured,machineProgress:k.machine_target?machines/Number(k.machine_target)*100:0,insuranceProgress:k.insurance_target?insured/Number(k.insurance_target)*100:0,machineForecast:elapsed?machines/elapsed*monthDays:0,insuranceForecast:elapsed?insured/elapsed*monthDays:0,month};});
-  total.totalRevenue=total.machineRevenue+total.insuranceRevenue;
-  res.json({ from, to, total, employees: rows, trend:[...trendMap.values()].sort((a,b)=>a.date.localeCompare(b.date)), branchSummary, branchKpiProgress, kiot: { orders: Number(kt.orders || 0), machines: Number(kt.machines || 0), revenue: Number(kt.revenue || 0) }, kiotByEmployee: kiotR.rows, comparison, kpiProgress });
+app.get('/api/business-history',auth,manager,wrap(async(req,res)=>{
+ const year=Number(req.query.year||new Date().getFullYear());
+ const branch=String(req.query.branch||'');
+ if(!Number.isInteger(year)||year<2000||year>2100)return res.status(400).json({error:'Năm không hợp lệ'});
+ const from=year+'-01-01',to=year+'-12-31';
+ const [kiot,visitors,stock]=await Promise.all([
+  rzKiotAggregate(from,to,branch),
+  q('SELECT to_char(work_date,\'YYYY-MM\') month,COALESCE(SUM(customers),0)::int customers,COALESCE(SUM(successful),0)::int successful FROM daily_stats WHERE work_date BETWEEN $1 AND $2 AND ($3::text=\'\' OR branch=$3) GROUP BY 1',[from,to,branch]),
+  q("SELECT to_char(sale_date,'YYYY-MM') month,COUNT(*) FILTER (WHERE stock_source='Trong kho')::int in_stock,COUNT(*) FILTER (WHERE stock_source<>'Trong kho')::int outside_stock FROM manual_sales WHERE sale_date BETWEEN $1 AND $2 AND ($3::text='' OR branch=$3) GROUP BY 1",[from,to,branch])
+ ]);
+ const monthly=new Map();
+ for(let i=1;i<=12;i++){const month=year+'-'+String(i).padStart(2,'0');monthly.set(month,{month,machines:0,machineRevenue:0,insured:0,insuranceRevenue:0,customers:0,successful:0,inStock:0,outsideStock:0})}
+ for(const x of kiot){const m=String(x.day).slice(0,7),d=monthly.get(m);if(!d)continue;if(x.category==='machine'){d.machines+=Number(x.qty);d.machineRevenue+=Number(x.revenue)}if(x.category==='insurance'&&Number(x.revenue)>0){d.insured+=Number(x.qty);d.insuranceRevenue+=Number(x.revenue)}}
+ for(const x of visitors.rows){const d=monthly.get(x.month);if(d){d.customers=Number(x.customers);d.successful=Number(x.successful)}}
+ for(const x of stock.rows){const d=monthly.get(x.month);if(d){d.inStock=Number(x.in_stock);d.outsideStock=Number(x.outside_stock)}}
+ res.json({year,branch,months:[...monthly.values()].map(d=>({...d,totalRevenue:d.machineRevenue+d.insuranceRevenue,closeRate:d.customers?d.successful/d.customers*100:null}))});
+}));
+
+app.get('/api/dashboard',auth,wrap(async(req,res)=>{
+ const from=String(req.query.from||new Date().toISOString().slice(0,10));
+ const to=String(req.query.to||from),branch=String(req.query.branch||'');
+ const employeeId=req.user.role==='manager'?(req.query.employeeId?Number(req.query.employeeId):null):Number(req.user.id);
+ const month=String(req.query.month||to.slice(0,7));
+ const [lines,users,kpis,branchKpis]=await Promise.all([
+  rzKiotAggregate(from,to,branch,employeeId),
+  q(req.user.role==='manager'?"SELECT id,display_name FROM users WHERE role='employee' AND active=1 ORDER BY display_name":"SELECT id,display_name FROM users WHERE id=$1",req.user.role==='manager'?[]:[req.user.id]),
+  q('SELECT k.*,u.display_name FROM kpis k JOIN users u ON u.id=k.employee_id WHERE k.month=$1',[month]),
+  q(`SELECT * FROM branch_kpis WHERE month=$1 AND ($2='' OR branch=$2)`,[month,branch])
+ ]);
+ const manualFilters=[from,to];
+ let manualScope='';
+ if(branch){manualFilters.push(branch);manualScope+=' AND branch=$'+manualFilters.length}
+ if(employeeId){manualFilters.push(employeeId);manualScope+=' AND employee_id=$'+manualFilters.length}
+ const [manualDaily,manualStock,weekdayRows]=await Promise.all([
+  q('SELECT COALESCE(SUM(customers),0)::int customers,COALESCE(SUM(successful),0)::int successful,COALESCE(SUM(failed),0)::int failed FROM daily_stats WHERE work_date BETWEEN $1 AND $2'+manualScope,manualFilters),
+  q("SELECT COALESCE(SUM(CASE WHEN stock_source='Trong kho' THEN 1 ELSE 0 END),0)::int in_stock,COALESCE(SUM(CASE WHEN stock_source<>'Trong kho' THEN 1 ELSE 0 END),0)::int outside_stock FROM manual_sales WHERE sale_date BETWEEN $1 AND $2"+manualScope,manualFilters),
+  q('SELECT EXTRACT(DOW FROM work_date)::int weekday,COUNT(DISTINCT work_date)::int days,COALESCE(SUM(customers),0)::int visitors,COALESCE(SUM(successful),0)::int successful FROM daily_stats WHERE work_date BETWEEN $1 AND $2'+manualScope+' GROUP BY EXTRACT(DOW FROM work_date) ORDER BY weekday',manualFilters)
+ ]);
+ const manual={...manualDaily.rows[0],inStock:manualStock.rows[0].in_stock,outsideStock:manualStock.rows[0].outside_stock};
+ manual.closeRate=Number(manual.customers)?Number(manual.successful)/Number(manual.customers)*100:null;
+ const weekdayVisitors=weekdayRows.rows.map(x=>({weekday:Number(x.weekday),days:Number(x.days),visitors:Number(x.visitors),successful:Number(x.successful),average:Number(x.days)?Number(x.visitors)/Number(x.days):0}));
+ const total=rzSummarizeKiot(lines);
+ total.customers=Number(manual.customers);total.successful=Number(manual.successful);total.failed=Number(manual.failed);total.closeRate=manual.closeRate;total.inStock=Number(manual.inStock);total.outsideStock=Number(manual.outsideStock);
+ const employeeLines=lines.filter(x=>x.employee_id!=null);
+ const employees=users.rows.filter(u=>!employeeId||Number(u.id)===employeeId).map(u=>{
+  const t=rzSummarizeKiot(employeeLines.filter(x=>Number(x.employee_id)===Number(u.id)));
+  return {employeeId:Number(u.id),name:u.display_name,...t};
+ });
+ const trendMap=new Map(),branchMap=new Map();
+ for(const x of lines){
+  if(!trendMap.has(x.day))trendMap.set(x.day,{date:x.day,machines:0,machineRevenue:0,insuranceRevenue:0,customers:0,successful:0});
+  const d=trendMap.get(x.day);if(x.category==='machine'){d.machines+=Number(x.qty);d.machineRevenue+=Number(x.revenue)}
+  if(x.category==='insurance'&&Number(x.revenue)>0)d.insuranceRevenue+=Number(x.revenue);
+  if(!branchMap.has(x.branch))branchMap.set(x.branch,{branch:x.branch,machines:0,machineRevenue:0,insured:0,insuranceRevenue:0,inStock:0,outsideStock:0,customers:0,successful:0,failed:0});
+  const b=branchMap.get(x.branch);if(x.category==='machine'){b.machines+=Number(x.qty);b.machineRevenue+=Number(x.revenue)}
+  if(x.category==='insurance'&&Number(x.revenue)>0){b.insured+=Number(x.qty);b.insuranceRevenue+=Number(x.revenue)}
+ }
+ const branchSummary=[...branchMap.values()].map(x=>({...x,totalRevenue:x.machineRevenue+x.insuranceRevenue,closeRate:0}));
+ const startMonth=month+'-01';const [year,mo]=month.split('-').map(Number);
+ const endMonth=new Date(Date.UTC(year,mo,0)).toISOString().slice(0,10);
+ const monthLines=await rzKiotAggregate(startMonth,endMonth,branch,employeeId);
+ const now=new Date(),daysInMonth=new Date(year,mo,0).getDate();
+ const elapsed=month===now.toISOString().slice(0,7)?now.getDate():daysInMonth;
+ const kpiProgress=kpis.rows.filter(k=>!employeeId||Number(k.employee_id)===employeeId).map(k=>{
+  const a=rzSummarizeKiot(monthLines.filter(x=>Number(x.employee_id)===Number(k.employee_id)));
+  const machines=a.machines,insured=a.insured;
+  return {employeeId:Number(k.employee_id),name:k.display_name,machineTarget:Number(k.machine_target),insuranceTarget:Number(k.insurance_target),machines,insured,
+   machineProgress:k.machine_target?machines/Number(k.machine_target)*100:0,insuranceProgress:k.insurance_target?insured/Number(k.insurance_target)*100:0,
+   machineForecast:elapsed?machines/elapsed*daysInMonth:0,insuranceForecast:elapsed?insured/elapsed*daysInMonth:0,month};
+ });
+ const branchKpiProgress=branchKpis.rows.map(k=>{
+  const a=rzSummarizeKiot(monthLines.filter(x=>x.branch===k.branch));
+  const revenue=a.totalRevenue,revenueTarget=Number(k.revenue_target||0),insuranceRevenueTarget=Number(k.insurance_revenue_target||0);
+  return {branch:k.branch,revenue,revenueTarget,insuranceRevenue:a.insuranceRevenue,insuranceRevenueTarget,
+   revenueProgress:revenueTarget?revenue/revenueTarget*100:0,revenueForecast:elapsed?revenue/elapsed*daysInMonth:0,
+   machineTarget:Number(k.machine_target),insuranceTarget:Number(k.insurance_target),machines:a.machines,insured:a.insured,
+   machineProgress:k.machine_target?a.machines/Number(k.machine_target)*100:0,
+   insuranceProgress:k.insurance_target?a.insured/Number(k.insurance_target)*100:0,
+   machineForecast:elapsed?a.machines/elapsed*daysInMonth:0,insuranceForecast:elapsed?a.insured/elapsed*daysInMonth:0,month};
+ });
+ let comparison=null;
+ if(req.query.compareFrom&&req.query.compareTo){
+  comparison=rzSummarizeKiot(await rzKiotAggregate(String(req.query.compareFrom),String(req.query.compareTo),branch,employeeId));
+ }
+ const unmapped=[...new Set(lines.filter(x=>x.employee_id==null).map(x=>x.employee_name))];
+ res.json({from,to,source:'kiot_xlsx',total,employees,trend:[...trendMap.values()].sort((a,b)=>a.date.localeCompare(b.date)),branchSummary,
+  branchKpiProgress,kpiProgress,comparison,unmappedEmployees:unmapped,manualMetrics:manual,weekdayVisitors,
+  kiot:{orders:0,machines:total.machines,revenue:total.totalRevenue},kiotByEmployee:[]});
 }));
 
 app.get('/api/reconcile', auth, manager, wrap(async (req, res) => {
@@ -588,6 +773,67 @@ app.get('/api/reconcile', auth, manager, wrap(async (req, res) => {
 
 // Bảng lương thưởng KiotViet: chỉ tính những dòng đã được quản lý phân loại.
 const payCats = ['large','accessory','tradein','insurance','exclude'];
+// Quản lý: lương và KPI theo chính sách RenewZone; chỉ sử dụng đơn nhân viên nhập.
+function rzManagerMachineBonus(n){return n>=500?21000000:n>=450?17000000:n>=400?13000000:n>=350?9000000:n>=300?6000000:n>=250?3000000:0;}
+function rzManagerInsuranceBonus(machines,insured){if(machines<280)return 0;return insured>=300?17000000:insured>=250?13000000:insured>=200?10000000:insured>=150?7000000:insured>=100?5000000:0;}
+function rzManagerBusinessRate(attach,drop){
+  if(attach<20||drop>50)return 0;
+  // Trang 2: điều kiện 100% ghi <=25%, nhưng ghi chú yêu cầu đúng 25% không đạt.
+  const levels=[[1,attach>=55&&drop<25],[.9,attach<55&&drop>=28],[.8,attach<=50&&drop<30],[.7,attach<=45&&drop<35],[.6,attach<=40&&drop<40],[.5,attach<=35&&drop<45],[.4,attach<=30&&drop<=50]];
+  const hit=levels.find(([,ok])=>ok);return hit?hit[0]:null;
+}
+function rzManagerViolationFactor(n){return n>=4?0:n===3?.5:n===2?.7:n===1?.9:1;}
+const rzMonthOk=m=>/^\d{4}-(0[1-9]|1[0-2])$/.test(m);
+const rzManagerNum=(x,max)=>x===null||x===undefined||x===''?null:(Number.isFinite(Number(x))&&Number(x)>=0&&Number(x)<=max?Number(x):NaN);
+app.get('/api/manager-payroll',auth,manager,wrap(async(req,res)=>{
+ const month=String(req.query.month||'');if(!rzMonthOk(month))return res.status(400).json({error:'Tháng không hợp lệ'});
+ const branch=String(req.query.branch||'').trim();if(branch.length>80)return res.status(400).json({error:'Chi nhánh không hợp lệ'});
+ const managerId=req.user.id;
+ const config=(await q('SELECT * FROM manager_payroll WHERE manager_id=$1 AND month=$2 AND branch=$3',[managerId,month,branch])).rows[0]||null;
+ const from=month+'-01',to=new Date(Date.UTC(Number(month.slice(0,4)),Number(month.slice(5,7)),0)).toISOString().slice(0,10);
+ const a=[from,to,branch];
+ const kiotManager=rzSummarizeKiot(await rzKiotAggregate(from,to,branch));
+ const sales={machines:kiotManager.machines,insured:kiotManager.insured,machine_revenue:kiotManager.machineRevenue,insurance_revenue:kiotManager.insuranceRevenue};
+ const stats={bought:0,failed:0}; // Kiot invoice file has no non-buyers; manager must confirm rate manually.
+ const machines=Number(sales.machines),insured=Number(sales.insured),bought=Number(stats.bought),failed=Number(stats.failed);
+ const attachment=machines?insured/machines*100:null,drop=bought+failed?failed/(bought+failed)*100:null;
+ const baseMachine=rzManagerMachineBonus(machines),baseInsurance=rzManagerInsuranceBonus(machines,insured);
+ const inferred=attachment===null||drop===null?null:rzManagerBusinessRate(attachment,drop);
+ const rate=config?.business_rate_override!=null?Number(config.business_rate_override)/100:inferred;
+ const scores=[config?.store_score,config?.operations_score,config?.service_score];
+ const scoresReady=scores.every(x=>x!==null&&x!==undefined);
+ const quality=scoresReady?scores.reduce((sum,x)=>sum+Number(x),0)/3:null;
+ const errors=config?.report_errors==null?null:Number(config.report_errors);
+ const qualityFactor=errors!==null&&errors>=2?.7:quality===null?null:.7+.3*quality/100;
+ const violations=config?.violations==null?null:Number(config.violations);
+ const violationFactor=violations===null?null:rzManagerViolationFactor(violations);
+ const standard=config?.standard_days==null?null:Number(config.standard_days),worked=config?.worked_days==null?null:Number(config.worked_days);
+ const salary=standard>0&&worked!==null?Math.round(10000000*Math.min(worked/standard,1)):null;
+ const kpi=rate!==null&&qualityFactor!==null&&violationFactor!==null?Math.round((baseMachine+baseInsurance)*rate*qualityFactor*violationFactor):null;
+ const employmentFactor=config?.probation ? 0.85 : 1;
+ const total=salary!==null&&kpi!==null?Math.round((salary+kpi)*employmentFactor):null;
+ const warnings=[];
+ if(!config||standard===null||worked===null)warnings.push('Chưa nhập công chuẩn và ngày công thực tế.');
+ if(drop===null)warnings.push('Excel KiotViet không có số khách không mua: cần nhập mức hưởng kinh doanh do quản lý/BGĐ xác nhận.');
+ if(inferred===null&&config?.business_rate_override==null)warnings.push('Chính sách không xác định được mức hưởng kinh doanh cho tổ hợp tỷ lệ hiện tại; cần xác nhận mức hưởng.');
+ if(!scoresReady&&!(errors!==null&&errors>=2))warnings.push('Chưa có đủ 3 điểm chất lượng do BGĐ duyệt.');
+ if(violations===null)warnings.push('Chưa xác nhận số biên bản trong tháng.');
+ res.json({month,branch,config,metrics:{machines,insured,attachment,drop,bought,failed,machineRevenue:Number(sales.machine_revenue),insuranceRevenue:Number(sales.insurance_revenue)},calculation:{baseMachine,baseInsurance,inferredRate:inferred,rate,quality,qualityFactor,violationFactor,salary,kpi,employmentFactor,total},warnings,note:'Tạm tính theo dữ liệu Excel KiotViet; tỷ lệ rớt khách cần nhập/đối soát riêng vì Excel không ghi khách không mua.'});
+}));
+app.post('/api/manager-payroll',auth,manager,wrap(async(req,res)=>{
+ const b=req.body||{},month=String(b.month||''),branch=String(b.branch||'').trim();
+ if(!rzMonthOk(month)||branch.length>80)return res.status(400).json({error:'Tháng hoặc chi nhánh không hợp lệ'});
+ const fields=['standardDays','workedDays','storeScore','operationsScore','serviceScore','reportErrors','violations','businessRateOverride'];
+ const maxes=[31,31,100,100,100,1000,1000,100];
+ const vals=fields.map((f,i)=>rzManagerNum(b[f],maxes[i]));
+ if(vals.some(x=>Number.isNaN(x))|| (vals[0]!==null&&vals[0]<=0) ||(vals[0]!==null&&vals[1]!==null&&vals[1]>vals[0]) ||[5,6].some(i=>vals[i]!==null&&!Number.isInteger(vals[i])))return res.status(400).json({error:'Số công, điểm hoặc biên bản không hợp lệ'});
+ const note=String(b.note||'').slice(0,500);
+ await q(`INSERT INTO manager_payroll(manager_id,month,branch,standard_days,worked_days,probation,store_score,operations_score,service_score,report_errors,violations,business_rate_override,note)
+ VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+ ON CONFLICT(manager_id,month,branch) DO UPDATE SET standard_days=EXCLUDED.standard_days,worked_days=EXCLUDED.worked_days,probation=EXCLUDED.probation,store_score=EXCLUDED.store_score,operations_score=EXCLUDED.operations_score,service_score=EXCLUDED.service_score,report_errors=EXCLUDED.report_errors,violations=EXCLUDED.violations,business_rate_override=EXCLUDED.business_rate_override,note=EXCLUDED.note,updated_at=CURRENT_TIMESTAMP`,[req.user.id,month,branch,vals[0],vals[1],b.probation===true,vals[2],vals[3],vals[4],vals[5],vals[6],vals[7],note]);
+ await log(req.user.id,'upsert','manager_payroll',null,{month,branch});res.json({ok:true});
+}));
+
 app.get('/api/payroll/items', auth, manager, wrap(async(req,res)=>{
  const month=String(req.query.month||'');
  if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(month))return res.status(400).json({error:'Tháng không hợp lệ'});
@@ -607,7 +853,8 @@ app.post('/api/payroll/classify',auth,manager,wrap(async(req,res)=>{
 }));
 app.get('/api/payroll/staff',auth,manager,wrap(async(req,res)=>{
  const r=await q(`SELECT names.employee_name,ps.hire_date::text AS hire_date,COALESCE(ps.base_salary,0) base_salary
- FROM (SELECT DISTINCT employee_name FROM kiot_sales WHERE trim(employee_name)<>'' UNION SELECT employee_name FROM payroll_staff) names
+ FROM (SELECT display_name AS employee_name FROM users WHERE role='employee'
+ UNION SELECT employee_name FROM payroll_staff) names
  LEFT JOIN payroll_staff ps ON ps.employee_name=names.employee_name ORDER BY names.employee_name`);
  res.json(r.rows);
 }));
@@ -618,38 +865,501 @@ app.post('/api/payroll/staff',auth,manager,wrap(async(req,res)=>{
  ON CONFLICT(employee_name) DO UPDATE SET hire_date=EXCLUDED.hire_date,base_salary=EXCLUDED.base_salary,updated_at=CURRENT_TIMESTAMP`,[name,date||null,base]);
  await log(req.user.id,'upsert','payroll_staff',null,{name,date,base});res.json({ok:true});
 }));
+// Payroll uses imported KiotViet invoice lines, not manually entered sales.
 app.get('/api/payroll/report',auth,manager,wrap(async(req,res)=>{
  const month=String(req.query.month||''),branch=String(req.query.branch||'');
  if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(month))return res.status(400).json({error:'Tháng không hợp lệ'});
- const rows=(await q(`SELECT k.employee_name,k.quantity,k.price,c.category
- FROM kiot_sales k LEFT JOIN kiot_pay_classification c ON c.kiot_id=k.id
- WHERE to_char(k.sale_date,'YYYY-MM')=$1 AND ($2='' OR k.branch=$2)`,[month,branch])).rows;
+ const from=month+'-01'; const [year,mon]=month.split('-').map(Number);
+ const to=new Date(Date.UTC(year,mon,0)).toISOString().slice(0,10);
+  const sales=(await q(`SELECT COALESCE(u.display_name,l.employee_name) AS employee_name,
+  COALESCE(SUM(CASE WHEN category='machine' THEN quantity ELSE 0 END),0)::int AS machines,
+  COALESCE(SUM(CASE WHEN category='insurance' AND amount>0 THEN quantity ELSE 0 END),0)::int AS insurance,
+  COALESCE(SUM(CASE WHEN category='insurance' THEN amount ELSE 0 END),0) AS insurance_revenue,
+  COALESCE(SUM(CASE WHEN category='accessory' AND amount>0 THEN quantity ELSE 0 END),0)::int AS accessory
+  FROM kiot_invoice_lines l LEFT JOIN kiot_employee_map m ON m.kiot_name=l.employee_name LEFT JOIN users u ON u.id=m.employee_id
+  WHERE l.sale_date BETWEEN $1 AND $2 AND ($3='' OR ${RZ_KIOT_BRANCH_SQL}=$3)
+  AND lower(trim(l.status)) IN ('hoàn thành','hoan thanh') GROUP BY COALESCE(u.display_name,l.employee_name)`,[from,to,branch])).rows;
+  const accessories=[];
  const staff=(await q('SELECT employee_name,hire_date::text AS hire_date,base_salary FROM payroll_staff')).rows;
- const map=new Map(staff.map(x=>[x.employee_name,x]));
+ const staffMap=new Map(staff.map(x=>[x.employee_name,x]));
  const out=new Map();
- for(const r of rows){const name=String(r.employee_name||'').trim();if(!name)continue;
- if(!out.has(name))out.set(name,{name,large:0,accessory:0,tradein:0,insurance:0,insuranceRevenue:0,unclassified:0,invalid:0});
- const x=out.get(name),qty=Number(r.quantity),price=Number(r.price);
- if(!r.category){x.unclassified++;continue;}
- if(r.category==='exclude')continue;
- if(!Number.isFinite(qty)||qty<=0||!Number.isInteger(qty)||!Number.isFinite(price)||price<0){x.invalid++;continue;}
- x[r.category]+=qty;
- if(r.category==='insurance')x.insuranceRevenue+=price;
- }
- const result=[...out.values()].map(x=>{
- const st=map.get(x.name),hire=st?.hire_date||null;
- // Chỉ xét đủ 1 tháng khi ngày bắt đầu làm <= ngày đầu tháng trước (nguyên tháng lịch).
- const [y,m]=month.split('-').map(Number);const threshold=new Date(Date.UTC(y,m-2,1)).toISOString().slice(0,10);
+ const get=(name)=>{if(!out.has(name))out.set(name,{name,large:0,accessory:0,tradein:0,insurance:0,insuranceRevenue:0,unclassified:0,invalid:0});return out.get(name)};
+ for(const r of sales){const x=get(r.employee_name);x.large+=Number(r.machines||0);x.insurance+=Number(r.insurance||0);x.insuranceRevenue+=Number(r.insurance_revenue||0);x.accessory+=Number(r.accessory||0)}
+ for(const r of accessories){get(r.employee_name).accessory+=Number(r.accessory||0)}
+ // Include configured staff with no sales only in all-branch view; branch-specific base salary must not be duplicated.
+ if(!branch)for(const st of staff)get(st.employee_name);
+ const threshold=new Date(Date.UTC(year,mon-2,1)).toISOString().slice(0,10);
+ const result=[...out.values()].sort((a,b)=>a.name.localeCompare(b.name,'vi')).map(x=>{
+ const st=staffMap.get(x.name),hire=st?.hire_date||null;
  const eligible=!!hire&&hire<=threshold;
- const rate=x.large>0&&x.insurance/x.large>=0.65?0.10:0.08;
  const ratio=x.large>0?x.insurance/x.large*100:null;
+ const rate=x.large>0&&x.insurance/x.large>=0.65?0.10:0.08;
  const bonus=eligible&&ratio!==null&&ratio>=80?2000000:0;
- const commission=x.large*30000+x.accessory*15000+x.tradein*10000;
+ // No trade-in input exists yet; do not fabricate trade-in commission.
+ const commission=x.large*30000+x.accessory*15000;
  const insuranceCommission=Math.round(x.insuranceRevenue*rate);
  const baseSalary=Number(st?.base_salary||0);
- return {...x,ratio,rate,eligible,hireDate:hire,baseSalary,commission,insuranceCommission,bonus,total:baseSalary+commission+insuranceCommission+bonus,complete:x.unclassified===0&&x.invalid===0&&!!hire&&(x.large>0||x.insurance===0)};
+ return {...x,ratio,rate,eligible,hireDate:hire,baseSalary,commission,insuranceCommission,bonus,total:baseSalary+commission+insuranceCommission+bonus,complete:!!hire,tradeinPending:true};
  });
- res.json({month,branch,rows:result,unclassified:result.reduce((s,x)=>s+x.unclassified,0),note:'Bảng tạm tính. Cần phân loại đủ dòng Kiot, kiểm tra doanh thu bảo hiểm và ngày vào làm trước khi chốt lương.'});
+ res.json({month,branch,source:'kiot_xlsx',rows:result,unclassified:0,note:'Lương thưởng tạm tính từ file Excel KiotViet đã tải lên (chỉ hóa đơn Hoàn thành). Tên người bán trên KiotViet cần khớp nhân viên. Chưa tính thu mua; kiểm tra ngày vào làm, lương cơ bản và đơn hoàn/hủy trước khi chốt.'});
+}));
+
+app.get('/api/audit', auth, manager, wrap(async (req, res) => {
+  const r = await q('SELECT a.*,u.display_name FROM audit_log a LEFT JOIN users u ON u.id=a.actor_id ORDER BY a.id DESC LIMIT 200'); res.json(r.rows);
+}));
+app.get('/api/export/sales.csv', auth, manager, wrap(async (req, res) => {
+  const from = req.query.from || '2000-01-01', to = req.query.to || '2999-12-31';
+  const rows = (await q('SELECT s.*,u.display_name FROM manual_sales s JOIN users u ON u.id=s.employee_id WHERE s.sale_date BETWEEN $1 AND $2 ORDER BY s.sale_date', [from, to])).rows;
+  const esc = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+  const csv = ['Ngày,Nhân viên,Mẫu máy,Giá bán,Nguồn máy,Phân loại,Bảo hiểm,Doanh thu bảo hiểm,Ghi chú', ...rows.map(r => [r.sale_date, r.display_name, r.model, r.price, r.stock_source, r.condition_type, r.insurance ? 'Có' : 'Không', r.insurance_revenue, r.note].map(esc).join(','))].join('\n');
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8'); res.setHeader('Content-Disposition', 'attachment; filename=renewzone-sales.csv'); res.send('\uFEFF' + csv);
+}));
+app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+
+app.use((err, req, res, next) => {
+  console.error('Request error:', err);
+  if (res.headersSent) return next(err);
+  res.status(500).json({ error: 'Máy chủ gặp lỗi. Vui lòng thử lại hoặc liên hệ quản lý.' });
+});
+
+async function start() {
+  await pool.query(schema);
+  await q(`INSERT INTO branches(name) VALUES ('Kha Vạn Cân'),('Dương Quảng Hàm') ON CONFLICT(name) DO NOTHING`);
+  if (process.env.ADMIN_PASSWORD) {
+    const n = Number((await q('SELECT COUNT(*) AS n FROM users')).rows[0].n);
+    if (!n) await q('INSERT INTO users(username,display_name,password_hash,role) VALUES($1,$2,$3,$4)',
+      [process.env.ADMIN_USERNAME || 'admin', 'Quản lý', bcrypt.hashSync(process.env.ADMIN_PASSWORD, 12), 'manager']);
+  }
+  app.listen(PORT, () => console.log(`RenewZone running on ${PORT}`));
+}
+start().catch(err => { console.error('Không khởi động được RenewZone:', err); process.exit(1); });
++manualFilters.length}
+ if(employeeId){manualFilters.push(employeeId);manualScope+=' AND employee_id=
+ const employeeLines=lines.filter(x=>x.employee_id!=null);
+ const employees=users.rows.filter(u=>!employeeId||Number(u.id)===employeeId).map(u=>{
+  const t=rzSummarizeKiot(employeeLines.filter(x=>Number(x.employee_id)===Number(u.id)));
+  return {employeeId:Number(u.id),name:u.display_name,...t};
+ });
+ const trendMap=new Map(),branchMap=new Map();
+ for(const x of lines){
+  if(!trendMap.has(x.day))trendMap.set(x.day,{date:x.day,machines:0,machineRevenue:0,insuranceRevenue:0,customers:0,successful:0});
+  const d=trendMap.get(x.day);if(x.category==='machine'){d.machines+=Number(x.qty);d.machineRevenue+=Number(x.revenue)}
+  if(x.category==='insurance'&&Number(x.revenue)>0)d.insuranceRevenue+=Number(x.revenue);
+  if(!branchMap.has(x.branch))branchMap.set(x.branch,{branch:x.branch,machines:0,machineRevenue:0,insured:0,insuranceRevenue:0,inStock:0,outsideStock:0,customers:0,successful:0,failed:0});
+  const b=branchMap.get(x.branch);if(x.category==='machine'){b.machines+=Number(x.qty);b.machineRevenue+=Number(x.revenue)}
+  if(x.category==='insurance'&&Number(x.revenue)>0){b.insured+=Number(x.qty);b.insuranceRevenue+=Number(x.revenue)}
+ }
+ const branchSummary=[...branchMap.values()].map(x=>({...x,totalRevenue:x.machineRevenue+x.insuranceRevenue,closeRate:0}));
+ const startMonth=month+'-01';const [year,mo]=month.split('-').map(Number);
+ const endMonth=new Date(Date.UTC(year,mo,0)).toISOString().slice(0,10);
+ const monthLines=await rzKiotAggregate(startMonth,endMonth,branch,employeeId);
+ const now=new Date(),daysInMonth=new Date(year,mo,0).getDate();
+ const elapsed=month===now.toISOString().slice(0,7)?now.getDate():daysInMonth;
+ const kpiProgress=kpis.rows.filter(k=>!employeeId||Number(k.employee_id)===employeeId).map(k=>{
+  const a=rzSummarizeKiot(monthLines.filter(x=>Number(x.employee_id)===Number(k.employee_id)));
+  const machines=a.machines,insured=a.insured;
+  return {employeeId:Number(k.employee_id),name:k.display_name,machineTarget:Number(k.machine_target),insuranceTarget:Number(k.insurance_target),machines,insured,
+   machineProgress:k.machine_target?machines/Number(k.machine_target)*100:0,insuranceProgress:k.insurance_target?insured/Number(k.insurance_target)*100:0,
+   machineForecast:elapsed?machines/elapsed*daysInMonth:0,insuranceForecast:elapsed?insured/elapsed*daysInMonth:0,month};
+ });
+ const branchKpiProgress=branchKpis.rows.map(k=>{
+  const a=rzSummarizeKiot(monthLines.filter(x=>x.branch===k.branch));
+  const revenue=a.totalRevenue,revenueTarget=Number(k.revenue_target||0),insuranceRevenueTarget=Number(k.insurance_revenue_target||0);
+  return {branch:k.branch,revenue,revenueTarget,insuranceRevenue:a.insuranceRevenue,insuranceRevenueTarget,
+   revenueProgress:revenueTarget?revenue/revenueTarget*100:0,revenueForecast:elapsed?revenue/elapsed*daysInMonth:0,
+   machineTarget:Number(k.machine_target),insuranceTarget:Number(k.insurance_target),machines:a.machines,insured:a.insured,
+   machineProgress:k.machine_target?a.machines/Number(k.machine_target)*100:0,
+   insuranceProgress:k.insurance_target?a.insured/Number(k.insurance_target)*100:0,
+   machineForecast:elapsed?a.machines/elapsed*daysInMonth:0,insuranceForecast:elapsed?a.insured/elapsed*daysInMonth:0,month};
+ });
+ let comparison=null;
+ if(req.query.compareFrom&&req.query.compareTo){
+  comparison=rzSummarizeKiot(await rzKiotAggregate(String(req.query.compareFrom),String(req.query.compareTo),branch,employeeId));
+ }
+ const unmapped=[...new Set(lines.filter(x=>x.employee_id==null).map(x=>x.employee_name))];
+ res.json({from,to,source:'kiot_xlsx',total,employees,trend:[...trendMap.values()].sort((a,b)=>a.date.localeCompare(b.date)),branchSummary,
+  branchKpiProgress,kpiProgress,comparison,unmappedEmployees:unmapped,
+  kiot:{orders:0,machines:total.machines,revenue:total.totalRevenue},kiotByEmployee:[]});
+}));
+
+app.get('/api/reconcile', auth, manager, wrap(async (req, res) => {
+  const from = req.query.from || new Date().toISOString().slice(0, 10), to = req.query.to || from;
+  const kiot = (await q('SELECT employee_name,COUNT(*) orders,SUM(quantity) machines,SUM(price) revenue FROM kiot_sales WHERE sale_date BETWEEN $1 AND $2 GROUP BY employee_name', [from, to])).rows;
+  const manual = (await q('SELECT u.display_name employee_name,COUNT(*) orders,SUM(s.price) revenue FROM manual_sales s JOIN users u ON u.id=s.employee_id WHERE s.sale_date BETWEEN $1 AND $2 GROUP BY u.display_name', [from, to])).rows;
+  const kMachines = Number((await q('SELECT COALESCE(SUM(quantity),0) n FROM kiot_sales WHERE sale_date BETWEEN $1 AND $2', [from, to])).rows[0].n);
+  const mMachines = Number((await q('SELECT COUNT(*) n FROM manual_sales WHERE sale_date BETWEEN $1 AND $2', [from, to])).rows[0].n);
+  const kiotRevenue = Number((await q('SELECT COALESCE(SUM(price),0) n FROM kiot_sales WHERE sale_date BETWEEN $1 AND $2', [from, to])).rows[0].n);
+  const manualRevenue = Number((await q('SELECT COALESCE(SUM(price),0) n FROM manual_sales WHERE sale_date BETWEEN $1 AND $2', [from, to])).rows[0].n);
+  res.json({ from, to, kiot, manual, kiotMachines: kMachines, manualMachines: mMachines, difference: mMachines - kMachines, kiotRevenue, manualRevenue });
+}));
+
+// Bảng lương thưởng KiotViet: chỉ tính những dòng đã được quản lý phân loại.
+const payCats = ['large','accessory','tradein','insurance','exclude'];
+// Quản lý: lương và KPI theo chính sách RenewZone; chỉ sử dụng đơn nhân viên nhập.
+function rzManagerMachineBonus(n){return n>=500?21000000:n>=450?17000000:n>=400?13000000:n>=350?9000000:n>=300?6000000:n>=250?3000000:0;}
+function rzManagerInsuranceBonus(machines,insured){if(machines<280)return 0;return insured>=300?17000000:insured>=250?13000000:insured>=200?10000000:insured>=150?7000000:insured>=100?5000000:0;}
+function rzManagerBusinessRate(attach,drop){
+  if(attach<20||drop>50)return 0;
+  // Trang 2: điều kiện 100% ghi <=25%, nhưng ghi chú yêu cầu đúng 25% không đạt.
+  const levels=[[1,attach>=55&&drop<25],[.9,attach<55&&drop>=28],[.8,attach<=50&&drop<30],[.7,attach<=45&&drop<35],[.6,attach<=40&&drop<40],[.5,attach<=35&&drop<45],[.4,attach<=30&&drop<=50]];
+  const hit=levels.find(([,ok])=>ok);return hit?hit[0]:null;
+}
+function rzManagerViolationFactor(n){return n>=4?0:n===3?.5:n===2?.7:n===1?.9:1;}
+const rzMonthOk=m=>/^\d{4}-(0[1-9]|1[0-2])$/.test(m);
+const rzManagerNum=(x,max)=>x===null||x===undefined||x===''?null:(Number.isFinite(Number(x))&&Number(x)>=0&&Number(x)<=max?Number(x):NaN);
+app.get('/api/manager-payroll',auth,manager,wrap(async(req,res)=>{
+ const month=String(req.query.month||'');if(!rzMonthOk(month))return res.status(400).json({error:'Tháng không hợp lệ'});
+ const branch=String(req.query.branch||'').trim();if(branch.length>80)return res.status(400).json({error:'Chi nhánh không hợp lệ'});
+ const managerId=req.user.id;
+ const config=(await q('SELECT * FROM manager_payroll WHERE manager_id=$1 AND month=$2 AND branch=$3',[managerId,month,branch])).rows[0]||null;
+ const from=month+'-01',to=new Date(Date.UTC(Number(month.slice(0,4)),Number(month.slice(5,7)),0)).toISOString().slice(0,10);
+ const a=[from,to,branch];
+ const kiotManager=rzSummarizeKiot(await rzKiotAggregate(from,to,branch));
+ const sales={machines:kiotManager.machines,insured:kiotManager.insured,machine_revenue:kiotManager.machineRevenue,insurance_revenue:kiotManager.insuranceRevenue};
+ const stats={bought:0,failed:0}; // Kiot invoice file has no non-buyers; manager must confirm rate manually.
+ const machines=Number(sales.machines),insured=Number(sales.insured),bought=Number(stats.bought),failed=Number(stats.failed);
+ const attachment=machines?insured/machines*100:null,drop=bought+failed?failed/(bought+failed)*100:null;
+ const baseMachine=rzManagerMachineBonus(machines),baseInsurance=rzManagerInsuranceBonus(machines,insured);
+ const inferred=attachment===null||drop===null?null:rzManagerBusinessRate(attachment,drop);
+ const rate=config?.business_rate_override!=null?Number(config.business_rate_override)/100:inferred;
+ const scores=[config?.store_score,config?.operations_score,config?.service_score];
+ const scoresReady=scores.every(x=>x!==null&&x!==undefined);
+ const quality=scoresReady?scores.reduce((sum,x)=>sum+Number(x),0)/3:null;
+ const errors=config?.report_errors==null?null:Number(config.report_errors);
+ const qualityFactor=errors!==null&&errors>=2?.7:quality===null?null:.7+.3*quality/100;
+ const violations=config?.violations==null?null:Number(config.violations);
+ const violationFactor=violations===null?null:rzManagerViolationFactor(violations);
+ const standard=config?.standard_days==null?null:Number(config.standard_days),worked=config?.worked_days==null?null:Number(config.worked_days);
+ const salary=standard>0&&worked!==null?Math.round(10000000*Math.min(worked/standard,1)):null;
+ const kpi=rate!==null&&qualityFactor!==null&&violationFactor!==null?Math.round((baseMachine+baseInsurance)*rate*qualityFactor*violationFactor):null;
+ const employmentFactor=config?.probation ? 0.85 : 1;
+ const total=salary!==null&&kpi!==null?Math.round((salary+kpi)*employmentFactor):null;
+ const warnings=[];
+ if(!config||standard===null||worked===null)warnings.push('Chưa nhập công chuẩn và ngày công thực tế.');
+ if(drop===null)warnings.push('Excel KiotViet không có số khách không mua: cần nhập mức hưởng kinh doanh do quản lý/BGĐ xác nhận.');
+ if(inferred===null&&config?.business_rate_override==null)warnings.push('Chính sách không xác định được mức hưởng kinh doanh cho tổ hợp tỷ lệ hiện tại; cần xác nhận mức hưởng.');
+ if(!scoresReady&&!(errors!==null&&errors>=2))warnings.push('Chưa có đủ 3 điểm chất lượng do BGĐ duyệt.');
+ if(violations===null)warnings.push('Chưa xác nhận số biên bản trong tháng.');
+ res.json({month,branch,config,metrics:{machines,insured,attachment,drop,bought,failed,machineRevenue:Number(sales.machine_revenue),insuranceRevenue:Number(sales.insurance_revenue)},calculation:{baseMachine,baseInsurance,inferredRate:inferred,rate,quality,qualityFactor,violationFactor,salary,kpi,employmentFactor,total},warnings,note:'Tạm tính theo dữ liệu Excel KiotViet; tỷ lệ rớt khách cần nhập/đối soát riêng vì Excel không ghi khách không mua.'});
+}));
+app.post('/api/manager-payroll',auth,manager,wrap(async(req,res)=>{
+ const b=req.body||{},month=String(b.month||''),branch=String(b.branch||'').trim();
+ if(!rzMonthOk(month)||branch.length>80)return res.status(400).json({error:'Tháng hoặc chi nhánh không hợp lệ'});
+ const fields=['standardDays','workedDays','storeScore','operationsScore','serviceScore','reportErrors','violations','businessRateOverride'];
+ const maxes=[31,31,100,100,100,1000,1000,100];
+ const vals=fields.map((f,i)=>rzManagerNum(b[f],maxes[i]));
+ if(vals.some(x=>Number.isNaN(x))|| (vals[0]!==null&&vals[0]<=0) ||(vals[0]!==null&&vals[1]!==null&&vals[1]>vals[0]) ||[5,6].some(i=>vals[i]!==null&&!Number.isInteger(vals[i])))return res.status(400).json({error:'Số công, điểm hoặc biên bản không hợp lệ'});
+ const note=String(b.note||'').slice(0,500);
+ await q(`INSERT INTO manager_payroll(manager_id,month,branch,standard_days,worked_days,probation,store_score,operations_score,service_score,report_errors,violations,business_rate_override,note)
+ VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+ ON CONFLICT(manager_id,month,branch) DO UPDATE SET standard_days=EXCLUDED.standard_days,worked_days=EXCLUDED.worked_days,probation=EXCLUDED.probation,store_score=EXCLUDED.store_score,operations_score=EXCLUDED.operations_score,service_score=EXCLUDED.service_score,report_errors=EXCLUDED.report_errors,violations=EXCLUDED.violations,business_rate_override=EXCLUDED.business_rate_override,note=EXCLUDED.note,updated_at=CURRENT_TIMESTAMP`,[req.user.id,month,branch,vals[0],vals[1],b.probation===true,vals[2],vals[3],vals[4],vals[5],vals[6],vals[7],note]);
+ await log(req.user.id,'upsert','manager_payroll',null,{month,branch});res.json({ok:true});
+}));
+
+app.get('/api/payroll/items', auth, manager, wrap(async(req,res)=>{
+ const month=String(req.query.month||'');
+ if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(month))return res.status(400).json({error:'Tháng không hợp lệ'});
+ const branch=String(req.query.branch||'');
+ const r=await q(`SELECT k.id,k.sale_date::text AS sale_date,k.external_id,k.employee_name,k.model,k.price,k.quantity,k.branch,c.category
+ FROM kiot_sales k LEFT JOIN kiot_pay_classification c ON c.kiot_id=k.id
+ WHERE to_char(k.sale_date,'YYYY-MM')=$1 AND ($2='' OR k.branch=$2)
+ ORDER BY k.sale_date DESC,k.id DESC LIMIT 3000`,[month,branch]);
+ res.json(r.rows);
+}));
+app.post('/api/payroll/classify',auth,manager,wrap(async(req,res)=>{
+ const id=Number(req.body.id), category=String(req.body.category||'');
+ if(!Number.isSafeInteger(id)||id<=0||(!payCats.includes(category)&&category!==''))return res.status(400).json({error:'Dữ liệu phân loại không hợp lệ'});
+ if(category==='')await q('DELETE FROM kiot_pay_classification WHERE kiot_id=$1',[id]);
+ else {const r=await q(`INSERT INTO kiot_pay_classification(kiot_id,category) SELECT id,$2 FROM kiot_sales WHERE id=$1 ON CONFLICT(kiot_id) DO UPDATE SET category=EXCLUDED.category,updated_at=CURRENT_TIMESTAMP RETURNING kiot_id`,[id,category]);if(!r.rowCount)return res.status(404).json({error:'Không tìm thấy dòng Kiot'});}
+ await log(req.user.id,'classify','kiot_pay',id,{category});res.json({ok:true});
+}));
+app.get('/api/payroll/staff',auth,manager,wrap(async(req,res)=>{
+ const r=await q(`SELECT names.employee_name,ps.hire_date::text AS hire_date,COALESCE(ps.base_salary,0) base_salary
+ FROM (SELECT display_name AS employee_name FROM users WHERE role='employee'
+ UNION SELECT employee_name FROM payroll_staff) names
+ LEFT JOIN payroll_staff ps ON ps.employee_name=names.employee_name ORDER BY names.employee_name`);
+ res.json(r.rows);
+}));
+app.post('/api/payroll/staff',auth,manager,wrap(async(req,res)=>{
+ const name=String(req.body.employeeName||'').trim(),date=String(req.body.hireDate||''),base=Number(req.body.baseSalary||0);
+ if(!name||name.length>200||date&&!/^\d{4}-\d{2}-\d{2}$/.test(date)||!Number.isSafeInteger(base)||base<0)return res.status(400).json({error:'Thông tin nhân viên không hợp lệ'});
+ await q(`INSERT INTO payroll_staff(employee_name,hire_date,base_salary) VALUES($1,$2,$3)
+ ON CONFLICT(employee_name) DO UPDATE SET hire_date=EXCLUDED.hire_date,base_salary=EXCLUDED.base_salary,updated_at=CURRENT_TIMESTAMP`,[name,date||null,base]);
+ await log(req.user.id,'upsert','payroll_staff',null,{name,date,base});res.json({ok:true});
+}));
+// Payroll uses imported KiotViet invoice lines, not manually entered sales.
+app.get('/api/payroll/report',auth,manager,wrap(async(req,res)=>{
+ const month=String(req.query.month||''),branch=String(req.query.branch||'');
+ if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(month))return res.status(400).json({error:'Tháng không hợp lệ'});
+ const from=month+'-01'; const [year,mon]=month.split('-').map(Number);
+ const to=new Date(Date.UTC(year,mon,0)).toISOString().slice(0,10);
+  const sales=(await q(`SELECT COALESCE(u.display_name,l.employee_name) AS employee_name,
+  COALESCE(SUM(CASE WHEN category='machine' THEN quantity ELSE 0 END),0)::int AS machines,
+  COALESCE(SUM(CASE WHEN category='insurance' AND amount>0 THEN quantity ELSE 0 END),0)::int AS insurance,
+  COALESCE(SUM(CASE WHEN category='insurance' THEN amount ELSE 0 END),0) AS insurance_revenue,
+  COALESCE(SUM(CASE WHEN category='accessory' AND amount>0 THEN quantity ELSE 0 END),0)::int AS accessory
+  FROM kiot_invoice_lines l LEFT JOIN kiot_employee_map m ON m.kiot_name=l.employee_name LEFT JOIN users u ON u.id=m.employee_id
+  WHERE l.sale_date BETWEEN $1 AND $2 AND ($3='' OR ${RZ_KIOT_BRANCH_SQL}=$3)
+  AND lower(trim(l.status)) IN ('hoàn thành','hoan thanh') GROUP BY COALESCE(u.display_name,l.employee_name)`,[from,to,branch])).rows;
+  const accessories=[];
+ const staff=(await q('SELECT employee_name,hire_date::text AS hire_date,base_salary FROM payroll_staff')).rows;
+ const staffMap=new Map(staff.map(x=>[x.employee_name,x]));
+ const out=new Map();
+ const get=(name)=>{if(!out.has(name))out.set(name,{name,large:0,accessory:0,tradein:0,insurance:0,insuranceRevenue:0,unclassified:0,invalid:0});return out.get(name)};
+ for(const r of sales){const x=get(r.employee_name);x.large+=Number(r.machines||0);x.insurance+=Number(r.insurance||0);x.insuranceRevenue+=Number(r.insurance_revenue||0);x.accessory+=Number(r.accessory||0)}
+ for(const r of accessories){get(r.employee_name).accessory+=Number(r.accessory||0)}
+ // Include configured staff with no sales only in all-branch view; branch-specific base salary must not be duplicated.
+ if(!branch)for(const st of staff)get(st.employee_name);
+ const threshold=new Date(Date.UTC(year,mon-2,1)).toISOString().slice(0,10);
+ const result=[...out.values()].sort((a,b)=>a.name.localeCompare(b.name,'vi')).map(x=>{
+ const st=staffMap.get(x.name),hire=st?.hire_date||null;
+ const eligible=!!hire&&hire<=threshold;
+ const ratio=x.large>0?x.insurance/x.large*100:null;
+ const rate=x.large>0&&x.insurance/x.large>=0.65?0.10:0.08;
+ const bonus=eligible&&ratio!==null&&ratio>=80?2000000:0;
+ // No trade-in input exists yet; do not fabricate trade-in commission.
+ const commission=x.large*30000+x.accessory*15000;
+ const insuranceCommission=Math.round(x.insuranceRevenue*rate);
+ const baseSalary=Number(st?.base_salary||0);
+ return {...x,ratio,rate,eligible,hireDate:hire,baseSalary,commission,insuranceCommission,bonus,total:baseSalary+commission+insuranceCommission+bonus,complete:!!hire,tradeinPending:true};
+ });
+ res.json({month,branch,source:'kiot_xlsx',rows:result,unclassified:0,note:'Lương thưởng tạm tính từ file Excel KiotViet đã tải lên (chỉ hóa đơn Hoàn thành). Tên người bán trên KiotViet cần khớp nhân viên. Chưa tính thu mua; kiểm tra ngày vào làm, lương cơ bản và đơn hoàn/hủy trước khi chốt.'});
+}));
+
+app.get('/api/audit', auth, manager, wrap(async (req, res) => {
+  const r = await q('SELECT a.*,u.display_name FROM audit_log a LEFT JOIN users u ON u.id=a.actor_id ORDER BY a.id DESC LIMIT 200'); res.json(r.rows);
+}));
+app.get('/api/export/sales.csv', auth, manager, wrap(async (req, res) => {
+  const from = req.query.from || '2000-01-01', to = req.query.to || '2999-12-31';
+  const rows = (await q('SELECT s.*,u.display_name FROM manual_sales s JOIN users u ON u.id=s.employee_id WHERE s.sale_date BETWEEN $1 AND $2 ORDER BY s.sale_date', [from, to])).rows;
+  const esc = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+  const csv = ['Ngày,Nhân viên,Mẫu máy,Giá bán,Nguồn máy,Phân loại,Bảo hiểm,Doanh thu bảo hiểm,Ghi chú', ...rows.map(r => [r.sale_date, r.display_name, r.model, r.price, r.stock_source, r.condition_type, r.insurance ? 'Có' : 'Không', r.insurance_revenue, r.note].map(esc).join(','))].join('\n');
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8'); res.setHeader('Content-Disposition', 'attachment; filename=renewzone-sales.csv'); res.send('\uFEFF' + csv);
+}));
+app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+
+app.use((err, req, res, next) => {
+  console.error('Request error:', err);
+  if (res.headersSent) return next(err);
+  res.status(500).json({ error: 'Máy chủ gặp lỗi. Vui lòng thử lại hoặc liên hệ quản lý.' });
+});
+
+async function start() {
+  await pool.query(schema);
+  await q(`INSERT INTO branches(name) VALUES ('Kha Vạn Cân'),('Dương Quảng Hàm') ON CONFLICT(name) DO NOTHING`);
+  if (process.env.ADMIN_PASSWORD) {
+    const n = Number((await q('SELECT COUNT(*) AS n FROM users')).rows[0].n);
+    if (!n) await q('INSERT INTO users(username,display_name,password_hash,role) VALUES($1,$2,$3,$4)',
+      [process.env.ADMIN_USERNAME || 'admin', 'Quản lý', bcrypt.hashSync(process.env.ADMIN_PASSWORD, 12), 'manager']);
+  }
+  app.listen(PORT, () => console.log(`RenewZone running on ${PORT}`));
+}
+start().catch(err => { console.error('Không khởi động được RenewZone:', err); process.exit(1); });
++manualFilters.length}
+ const [manualDaily,manualStock]=await Promise.all([
+  q('SELECT COALESCE(SUM(customers),0)::int customers,COALESCE(SUM(successful),0)::int successful,COALESCE(SUM(failed),0)::int failed FROM daily_stats WHERE work_date BETWEEN $1 AND $2'+manualScope,manualFilters),
+  q("SELECT COALESCE(SUM(CASE WHEN stock_source='Trong kho' THEN 1 ELSE 0 END),0)::int in_stock,COALESCE(SUM(CASE WHEN stock_source<>'Trong kho' THEN 1 ELSE 0 END),0)::int outside_stock FROM manual_sales WHERE sale_date BETWEEN $1 AND $2"+manualScope,manualFilters)
+ ]);
+ const manual={...manualDaily.rows[0],inStock:manualStock.rows[0].in_stock,outsideStock:manualStock.rows[0].outside_stock};
+ const manualCount=Number(manual.customers)||0;
+ manual.closeRate=manualCount?Number(manual.successful)/manualCount*100:null;
+ const weekdayRows=await q(`SELECT EXTRACT(DOW FROM work_date)::int weekday,
+   COUNT(DISTINCT work_date)::int days,
+   COALESCE(SUM(customers),0)::int visitors,
+   COALESCE(SUM(successful),0)::int successful
+   FROM daily_stats WHERE work_date BETWEEN $1 AND $2${manualScope}
+   GROUP BY EXTRACT(DOW FROM work_date) ORDER BY weekday`,manualFilters);
+ const weekdayVisitors=weekdayRows.rows.map(x=>({weekday:Number(x.weekday),days:Number(x.days),visitors:Number(x.visitors),successful:Number(x.successful),average:Number(x.days)?Number(x.visitors)/Number(x.days):0}));
+ const total=rzSummarizeKiot(lines);
+ const employeeLines=lines.filter(x=>x.employee_id!=null);
+ const employees=users.rows.filter(u=>!employeeId||Number(u.id)===employeeId).map(u=>{
+  const t=rzSummarizeKiot(employeeLines.filter(x=>Number(x.employee_id)===Number(u.id)));
+  return {employeeId:Number(u.id),name:u.display_name,...t};
+ });
+ const trendMap=new Map(),branchMap=new Map();
+ for(const x of lines){
+  if(!trendMap.has(x.day))trendMap.set(x.day,{date:x.day,machines:0,machineRevenue:0,insuranceRevenue:0,customers:0,successful:0});
+  const d=trendMap.get(x.day);if(x.category==='machine'){d.machines+=Number(x.qty);d.machineRevenue+=Number(x.revenue)}
+  if(x.category==='insurance'&&Number(x.revenue)>0)d.insuranceRevenue+=Number(x.revenue);
+  if(!branchMap.has(x.branch))branchMap.set(x.branch,{branch:x.branch,machines:0,machineRevenue:0,insured:0,insuranceRevenue:0,inStock:0,outsideStock:0,customers:0,successful:0,failed:0});
+  const b=branchMap.get(x.branch);if(x.category==='machine'){b.machines+=Number(x.qty);b.machineRevenue+=Number(x.revenue)}
+  if(x.category==='insurance'&&Number(x.revenue)>0){b.insured+=Number(x.qty);b.insuranceRevenue+=Number(x.revenue)}
+ }
+ const branchSummary=[...branchMap.values()].map(x=>({...x,totalRevenue:x.machineRevenue+x.insuranceRevenue,closeRate:0}));
+ const startMonth=month+'-01';const [year,mo]=month.split('-').map(Number);
+ const endMonth=new Date(Date.UTC(year,mo,0)).toISOString().slice(0,10);
+ const monthLines=await rzKiotAggregate(startMonth,endMonth,branch,employeeId);
+ const now=new Date(),daysInMonth=new Date(year,mo,0).getDate();
+ const elapsed=month===now.toISOString().slice(0,7)?now.getDate():daysInMonth;
+ const kpiProgress=kpis.rows.filter(k=>!employeeId||Number(k.employee_id)===employeeId).map(k=>{
+  const a=rzSummarizeKiot(monthLines.filter(x=>Number(x.employee_id)===Number(k.employee_id)));
+  const machines=a.machines,insured=a.insured;
+  return {employeeId:Number(k.employee_id),name:k.display_name,machineTarget:Number(k.machine_target),insuranceTarget:Number(k.insurance_target),machines,insured,
+   machineProgress:k.machine_target?machines/Number(k.machine_target)*100:0,insuranceProgress:k.insurance_target?insured/Number(k.insurance_target)*100:0,
+   machineForecast:elapsed?machines/elapsed*daysInMonth:0,insuranceForecast:elapsed?insured/elapsed*daysInMonth:0,month};
+ });
+ const branchKpiProgress=branchKpis.rows.map(k=>{
+  const a=rzSummarizeKiot(monthLines.filter(x=>x.branch===k.branch));
+  const revenue=a.totalRevenue,revenueTarget=Number(k.revenue_target||0),insuranceRevenueTarget=Number(k.insurance_revenue_target||0);
+  return {branch:k.branch,revenue,revenueTarget,insuranceRevenue:a.insuranceRevenue,insuranceRevenueTarget,
+   revenueProgress:revenueTarget?revenue/revenueTarget*100:0,revenueForecast:elapsed?revenue/elapsed*daysInMonth:0,
+   machineTarget:Number(k.machine_target),insuranceTarget:Number(k.insurance_target),machines:a.machines,insured:a.insured,
+   machineProgress:k.machine_target?a.machines/Number(k.machine_target)*100:0,
+   insuranceProgress:k.insurance_target?a.insured/Number(k.insurance_target)*100:0,
+   machineForecast:elapsed?a.machines/elapsed*daysInMonth:0,insuranceForecast:elapsed?a.insured/elapsed*daysInMonth:0,month};
+ });
+ let comparison=null;
+ if(req.query.compareFrom&&req.query.compareTo){
+  comparison=rzSummarizeKiot(await rzKiotAggregate(String(req.query.compareFrom),String(req.query.compareTo),branch,employeeId));
+ }
+ const unmapped=[...new Set(lines.filter(x=>x.employee_id==null).map(x=>x.employee_name))];
+ res.json({from,to,source:'kiot_xlsx',total,employees,trend:[...trendMap.values()].sort((a,b)=>a.date.localeCompare(b.date)),branchSummary,
+  branchKpiProgress,kpiProgress,comparison,unmappedEmployees:unmapped,
+  kiot:{orders:0,machines:total.machines,revenue:total.totalRevenue},kiotByEmployee:[]});
+}));
+
+app.get('/api/reconcile', auth, manager, wrap(async (req, res) => {
+  const from = req.query.from || new Date().toISOString().slice(0, 10), to = req.query.to || from;
+  const kiot = (await q('SELECT employee_name,COUNT(*) orders,SUM(quantity) machines,SUM(price) revenue FROM kiot_sales WHERE sale_date BETWEEN $1 AND $2 GROUP BY employee_name', [from, to])).rows;
+  const manual = (await q('SELECT u.display_name employee_name,COUNT(*) orders,SUM(s.price) revenue FROM manual_sales s JOIN users u ON u.id=s.employee_id WHERE s.sale_date BETWEEN $1 AND $2 GROUP BY u.display_name', [from, to])).rows;
+  const kMachines = Number((await q('SELECT COALESCE(SUM(quantity),0) n FROM kiot_sales WHERE sale_date BETWEEN $1 AND $2', [from, to])).rows[0].n);
+  const mMachines = Number((await q('SELECT COUNT(*) n FROM manual_sales WHERE sale_date BETWEEN $1 AND $2', [from, to])).rows[0].n);
+  const kiotRevenue = Number((await q('SELECT COALESCE(SUM(price),0) n FROM kiot_sales WHERE sale_date BETWEEN $1 AND $2', [from, to])).rows[0].n);
+  const manualRevenue = Number((await q('SELECT COALESCE(SUM(price),0) n FROM manual_sales WHERE sale_date BETWEEN $1 AND $2', [from, to])).rows[0].n);
+  res.json({ from, to, kiot, manual, kiotMachines: kMachines, manualMachines: mMachines, difference: mMachines - kMachines, kiotRevenue, manualRevenue });
+}));
+
+// Bảng lương thưởng KiotViet: chỉ tính những dòng đã được quản lý phân loại.
+const payCats = ['large','accessory','tradein','insurance','exclude'];
+// Quản lý: lương và KPI theo chính sách RenewZone; chỉ sử dụng đơn nhân viên nhập.
+function rzManagerMachineBonus(n){return n>=500?21000000:n>=450?17000000:n>=400?13000000:n>=350?9000000:n>=300?6000000:n>=250?3000000:0;}
+function rzManagerInsuranceBonus(machines,insured){if(machines<280)return 0;return insured>=300?17000000:insured>=250?13000000:insured>=200?10000000:insured>=150?7000000:insured>=100?5000000:0;}
+function rzManagerBusinessRate(attach,drop){
+  if(attach<20||drop>50)return 0;
+  // Trang 2: điều kiện 100% ghi <=25%, nhưng ghi chú yêu cầu đúng 25% không đạt.
+  const levels=[[1,attach>=55&&drop<25],[.9,attach<55&&drop>=28],[.8,attach<=50&&drop<30],[.7,attach<=45&&drop<35],[.6,attach<=40&&drop<40],[.5,attach<=35&&drop<45],[.4,attach<=30&&drop<=50]];
+  const hit=levels.find(([,ok])=>ok);return hit?hit[0]:null;
+}
+function rzManagerViolationFactor(n){return n>=4?0:n===3?.5:n===2?.7:n===1?.9:1;}
+const rzMonthOk=m=>/^\d{4}-(0[1-9]|1[0-2])$/.test(m);
+const rzManagerNum=(x,max)=>x===null||x===undefined||x===''?null:(Number.isFinite(Number(x))&&Number(x)>=0&&Number(x)<=max?Number(x):NaN);
+app.get('/api/manager-payroll',auth,manager,wrap(async(req,res)=>{
+ const month=String(req.query.month||'');if(!rzMonthOk(month))return res.status(400).json({error:'Tháng không hợp lệ'});
+ const branch=String(req.query.branch||'').trim();if(branch.length>80)return res.status(400).json({error:'Chi nhánh không hợp lệ'});
+ const managerId=req.user.id;
+ const config=(await q('SELECT * FROM manager_payroll WHERE manager_id=$1 AND month=$2 AND branch=$3',[managerId,month,branch])).rows[0]||null;
+ const from=month+'-01',to=new Date(Date.UTC(Number(month.slice(0,4)),Number(month.slice(5,7)),0)).toISOString().slice(0,10);
+ const a=[from,to,branch];
+ const kiotManager=rzSummarizeKiot(await rzKiotAggregate(from,to,branch));
+ const sales={machines:kiotManager.machines,insured:kiotManager.insured,machine_revenue:kiotManager.machineRevenue,insurance_revenue:kiotManager.insuranceRevenue};
+ const stats={bought:0,failed:0}; // Kiot invoice file has no non-buyers; manager must confirm rate manually.
+ const machines=Number(sales.machines),insured=Number(sales.insured),bought=Number(stats.bought),failed=Number(stats.failed);
+ const attachment=machines?insured/machines*100:null,drop=bought+failed?failed/(bought+failed)*100:null;
+ const baseMachine=rzManagerMachineBonus(machines),baseInsurance=rzManagerInsuranceBonus(machines,insured);
+ const inferred=attachment===null||drop===null?null:rzManagerBusinessRate(attachment,drop);
+ const rate=config?.business_rate_override!=null?Number(config.business_rate_override)/100:inferred;
+ const scores=[config?.store_score,config?.operations_score,config?.service_score];
+ const scoresReady=scores.every(x=>x!==null&&x!==undefined);
+ const quality=scoresReady?scores.reduce((sum,x)=>sum+Number(x),0)/3:null;
+ const errors=config?.report_errors==null?null:Number(config.report_errors);
+ const qualityFactor=errors!==null&&errors>=2?.7:quality===null?null:.7+.3*quality/100;
+ const violations=config?.violations==null?null:Number(config.violations);
+ const violationFactor=violations===null?null:rzManagerViolationFactor(violations);
+ const standard=config?.standard_days==null?null:Number(config.standard_days),worked=config?.worked_days==null?null:Number(config.worked_days);
+ const salary=standard>0&&worked!==null?Math.round(10000000*Math.min(worked/standard,1)):null;
+ const kpi=rate!==null&&qualityFactor!==null&&violationFactor!==null?Math.round((baseMachine+baseInsurance)*rate*qualityFactor*violationFactor):null;
+ const employmentFactor=config?.probation ? 0.85 : 1;
+ const total=salary!==null&&kpi!==null?Math.round((salary+kpi)*employmentFactor):null;
+ const warnings=[];
+ if(!config||standard===null||worked===null)warnings.push('Chưa nhập công chuẩn và ngày công thực tế.');
+ if(drop===null)warnings.push('Excel KiotViet không có số khách không mua: cần nhập mức hưởng kinh doanh do quản lý/BGĐ xác nhận.');
+ if(inferred===null&&config?.business_rate_override==null)warnings.push('Chính sách không xác định được mức hưởng kinh doanh cho tổ hợp tỷ lệ hiện tại; cần xác nhận mức hưởng.');
+ if(!scoresReady&&!(errors!==null&&errors>=2))warnings.push('Chưa có đủ 3 điểm chất lượng do BGĐ duyệt.');
+ if(violations===null)warnings.push('Chưa xác nhận số biên bản trong tháng.');
+ res.json({month,branch,config,metrics:{machines,insured,attachment,drop,bought,failed,machineRevenue:Number(sales.machine_revenue),insuranceRevenue:Number(sales.insurance_revenue)},calculation:{baseMachine,baseInsurance,inferredRate:inferred,rate,quality,qualityFactor,violationFactor,salary,kpi,employmentFactor,total},warnings,note:'Tạm tính theo dữ liệu Excel KiotViet; tỷ lệ rớt khách cần nhập/đối soát riêng vì Excel không ghi khách không mua.'});
+}));
+app.post('/api/manager-payroll',auth,manager,wrap(async(req,res)=>{
+ const b=req.body||{},month=String(b.month||''),branch=String(b.branch||'').trim();
+ if(!rzMonthOk(month)||branch.length>80)return res.status(400).json({error:'Tháng hoặc chi nhánh không hợp lệ'});
+ const fields=['standardDays','workedDays','storeScore','operationsScore','serviceScore','reportErrors','violations','businessRateOverride'];
+ const maxes=[31,31,100,100,100,1000,1000,100];
+ const vals=fields.map((f,i)=>rzManagerNum(b[f],maxes[i]));
+ if(vals.some(x=>Number.isNaN(x))|| (vals[0]!==null&&vals[0]<=0) ||(vals[0]!==null&&vals[1]!==null&&vals[1]>vals[0]) ||[5,6].some(i=>vals[i]!==null&&!Number.isInteger(vals[i])))return res.status(400).json({error:'Số công, điểm hoặc biên bản không hợp lệ'});
+ const note=String(b.note||'').slice(0,500);
+ await q(`INSERT INTO manager_payroll(manager_id,month,branch,standard_days,worked_days,probation,store_score,operations_score,service_score,report_errors,violations,business_rate_override,note)
+ VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+ ON CONFLICT(manager_id,month,branch) DO UPDATE SET standard_days=EXCLUDED.standard_days,worked_days=EXCLUDED.worked_days,probation=EXCLUDED.probation,store_score=EXCLUDED.store_score,operations_score=EXCLUDED.operations_score,service_score=EXCLUDED.service_score,report_errors=EXCLUDED.report_errors,violations=EXCLUDED.violations,business_rate_override=EXCLUDED.business_rate_override,note=EXCLUDED.note,updated_at=CURRENT_TIMESTAMP`,[req.user.id,month,branch,vals[0],vals[1],b.probation===true,vals[2],vals[3],vals[4],vals[5],vals[6],vals[7],note]);
+ await log(req.user.id,'upsert','manager_payroll',null,{month,branch});res.json({ok:true});
+}));
+
+app.get('/api/payroll/items', auth, manager, wrap(async(req,res)=>{
+ const month=String(req.query.month||'');
+ if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(month))return res.status(400).json({error:'Tháng không hợp lệ'});
+ const branch=String(req.query.branch||'');
+ const r=await q(`SELECT k.id,k.sale_date::text AS sale_date,k.external_id,k.employee_name,k.model,k.price,k.quantity,k.branch,c.category
+ FROM kiot_sales k LEFT JOIN kiot_pay_classification c ON c.kiot_id=k.id
+ WHERE to_char(k.sale_date,'YYYY-MM')=$1 AND ($2='' OR k.branch=$2)
+ ORDER BY k.sale_date DESC,k.id DESC LIMIT 3000`,[month,branch]);
+ res.json(r.rows);
+}));
+app.post('/api/payroll/classify',auth,manager,wrap(async(req,res)=>{
+ const id=Number(req.body.id), category=String(req.body.category||'');
+ if(!Number.isSafeInteger(id)||id<=0||(!payCats.includes(category)&&category!==''))return res.status(400).json({error:'Dữ liệu phân loại không hợp lệ'});
+ if(category==='')await q('DELETE FROM kiot_pay_classification WHERE kiot_id=$1',[id]);
+ else {const r=await q(`INSERT INTO kiot_pay_classification(kiot_id,category) SELECT id,$2 FROM kiot_sales WHERE id=$1 ON CONFLICT(kiot_id) DO UPDATE SET category=EXCLUDED.category,updated_at=CURRENT_TIMESTAMP RETURNING kiot_id`,[id,category]);if(!r.rowCount)return res.status(404).json({error:'Không tìm thấy dòng Kiot'});}
+ await log(req.user.id,'classify','kiot_pay',id,{category});res.json({ok:true});
+}));
+app.get('/api/payroll/staff',auth,manager,wrap(async(req,res)=>{
+ const r=await q(`SELECT names.employee_name,ps.hire_date::text AS hire_date,COALESCE(ps.base_salary,0) base_salary
+ FROM (SELECT display_name AS employee_name FROM users WHERE role='employee'
+ UNION SELECT employee_name FROM payroll_staff) names
+ LEFT JOIN payroll_staff ps ON ps.employee_name=names.employee_name ORDER BY names.employee_name`);
+ res.json(r.rows);
+}));
+app.post('/api/payroll/staff',auth,manager,wrap(async(req,res)=>{
+ const name=String(req.body.employeeName||'').trim(),date=String(req.body.hireDate||''),base=Number(req.body.baseSalary||0);
+ if(!name||name.length>200||date&&!/^\d{4}-\d{2}-\d{2}$/.test(date)||!Number.isSafeInteger(base)||base<0)return res.status(400).json({error:'Thông tin nhân viên không hợp lệ'});
+ await q(`INSERT INTO payroll_staff(employee_name,hire_date,base_salary) VALUES($1,$2,$3)
+ ON CONFLICT(employee_name) DO UPDATE SET hire_date=EXCLUDED.hire_date,base_salary=EXCLUDED.base_salary,updated_at=CURRENT_TIMESTAMP`,[name,date||null,base]);
+ await log(req.user.id,'upsert','payroll_staff',null,{name,date,base});res.json({ok:true});
+}));
+// Payroll uses imported KiotViet invoice lines, not manually entered sales.
+app.get('/api/payroll/report',auth,manager,wrap(async(req,res)=>{
+ const month=String(req.query.month||''),branch=String(req.query.branch||'');
+ if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(month))return res.status(400).json({error:'Tháng không hợp lệ'});
+ const from=month+'-01'; const [year,mon]=month.split('-').map(Number);
+ const to=new Date(Date.UTC(year,mon,0)).toISOString().slice(0,10);
+  const sales=(await q(`SELECT COALESCE(u.display_name,l.employee_name) AS employee_name,
+  COALESCE(SUM(CASE WHEN category='machine' THEN quantity ELSE 0 END),0)::int AS machines,
+  COALESCE(SUM(CASE WHEN category='insurance' AND amount>0 THEN quantity ELSE 0 END),0)::int AS insurance,
+  COALESCE(SUM(CASE WHEN category='insurance' THEN amount ELSE 0 END),0) AS insurance_revenue,
+  COALESCE(SUM(CASE WHEN category='accessory' AND amount>0 THEN quantity ELSE 0 END),0)::int AS accessory
+  FROM kiot_invoice_lines l LEFT JOIN kiot_employee_map m ON m.kiot_name=l.employee_name LEFT JOIN users u ON u.id=m.employee_id
+  WHERE l.sale_date BETWEEN $1 AND $2 AND ($3='' OR ${RZ_KIOT_BRANCH_SQL}=$3)
+  AND lower(trim(l.status)) IN ('hoàn thành','hoan thanh') GROUP BY COALESCE(u.display_name,l.employee_name)`,[from,to,branch])).rows;
+  const accessories=[];
+ const staff=(await q('SELECT employee_name,hire_date::text AS hire_date,base_salary FROM payroll_staff')).rows;
+ const staffMap=new Map(staff.map(x=>[x.employee_name,x]));
+ const out=new Map();
+ const get=(name)=>{if(!out.has(name))out.set(name,{name,large:0,accessory:0,tradein:0,insurance:0,insuranceRevenue:0,unclassified:0,invalid:0});return out.get(name)};
+ for(const r of sales){const x=get(r.employee_name);x.large+=Number(r.machines||0);x.insurance+=Number(r.insurance||0);x.insuranceRevenue+=Number(r.insurance_revenue||0);x.accessory+=Number(r.accessory||0)}
+ for(const r of accessories){get(r.employee_name).accessory+=Number(r.accessory||0)}
+ // Include configured staff with no sales only in all-branch view; branch-specific base salary must not be duplicated.
+ if(!branch)for(const st of staff)get(st.employee_name);
+ const threshold=new Date(Date.UTC(year,mon-2,1)).toISOString().slice(0,10);
+ const result=[...out.values()].sort((a,b)=>a.name.localeCompare(b.name,'vi')).map(x=>{
+ const st=staffMap.get(x.name),hire=st?.hire_date||null;
+ const eligible=!!hire&&hire<=threshold;
+ const ratio=x.large>0?x.insurance/x.large*100:null;
+ const rate=x.large>0&&x.insurance/x.large>=0.65?0.10:0.08;
+ const bonus=eligible&&ratio!==null&&ratio>=80?2000000:0;
+ // No trade-in input exists yet; do not fabricate trade-in commission.
+ const commission=x.large*30000+x.accessory*15000;
+ const insuranceCommission=Math.round(x.insuranceRevenue*rate);
+ const baseSalary=Number(st?.base_salary||0);
+ return {...x,ratio,rate,eligible,hireDate:hire,baseSalary,commission,insuranceCommission,bonus,total:baseSalary+commission+insuranceCommission+bonus,complete:!!hire,tradeinPending:true};
+ });
+ res.json({month,branch,source:'kiot_xlsx',rows:result,unclassified:0,note:'Lương thưởng tạm tính từ file Excel KiotViet đã tải lên (chỉ hóa đơn Hoàn thành). Tên người bán trên KiotViet cần khớp nhân viên. Chưa tính thu mua; kiểm tra ngày vào làm, lương cơ bản và đơn hoàn/hủy trước khi chốt.'});
 }));
 
 app.get('/api/audit', auth, manager, wrap(async (req, res) => {
