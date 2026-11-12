@@ -1297,7 +1297,7 @@ async function loadManagerPayroll(){
   for(const [name,key] of Object.entries({standardDays:'standard_days',workedDays:'worked_days',storeScore:'store_score',operationsScore:'operations_score',serviceScore:'service_score',reportErrors:'report_errors',violations:'violations',businessRateOverride:'business_rate_override',note:'note'}))f.elements[name].value=c[key]??'';
   f.elements.probation.value=String(Boolean(c.probation));
   const val=n=>n===null?'Chưa đủ dữ liệu':money(n),rate=n=>n===null?'Chưa xác định':(n*100).toFixed(1)+'%';
-  $('#mpSummary').innerHTML=`<div><span>Lương theo công</span><strong>${val(x.salary)}</strong></div><div><span>Thưởng KPI sau hệ số</span><strong>${val(x.kpi)}</strong></div><div><span>TỔNG THU NHẬP TẠM TÍNH</span><strong>${val(x.total)}</strong></div>`;
+  $('#mpSummary').innerHTML=`<div><span>Máy dự kiến cuối tháng</span><strong>${m.projectedMachines} máy</strong><small>Thực tế ${m.machines} máy</small></div><div><span>Bảo hiểm dự kiến cuối tháng</span><strong>${m.projectedInsured} BH</strong><small>Thực tế ${m.insured} BH</small></div><div class="rz-projected-reward"><span>Thưởng máy dự kiến</span><strong>${money(x.baseMachine)}</strong></div><div class="rz-projected-reward"><span>Thưởng bảo hiểm dự kiến</span><strong>${money(x.baseInsurance)}</strong></div><div class="rz-projected-reward"><span>TỔNG THƯỞNG THEO SẢN LƯỢNG DỰ KIẾN</span><strong>${money(x.baseMachine+x.baseInsurance)}</strong><small>Chưa áp dụng hệ số kinh doanh / chất lượng</small></div><div><span>Lương theo công</span><strong>${val(x.salary)}</strong></div><div><span>Thưởng KPI sau hệ số</span><strong>${val(x.kpi)}</strong></div><div><span>TỔNG THU NHẬP TẠM TÍNH</span><strong>${val(x.total)}</strong></div>`;
   $('#mpWarnings').textContent=r.warnings.length?'⚠ '+r.warnings.join(' '):'Đã đủ dữ liệu để tính tạm tính. Chờ BGĐ kiểm tra và duyệt.';
   $('#mpDetail').innerHTML=`<tr><td>${m.projectedMachines} / ${m.projectedInsured} <small style="display:block;color:#786a91">Thực tế: ${m.machines} / ${m.insured} · ×${m.forecastMultiplier.toFixed(2)}</small></td><td>${m.attachment===null?'—':m.attachment.toFixed(1)+'%'}</td><td>${m.drop===null?'—':m.drop.toFixed(1)+'%'}</td><td>${money(x.baseMachine)}</td><td>${money(x.baseInsurance)}</td><td>${rate(x.rate)}</td><td>${x.quality===null?'—':x.quality.toFixed(1)+'/100'}</td><td>${rate(x.violationFactor)}</td><td><b>${val(x.kpi)}</b></td></tr>`;
  }catch(e){$('#mpWarnings').textContent='Không tải được lương quản lý: '+e.message;toast(e.message)}
@@ -1431,5 +1431,15 @@ html,body{background:var(--erp-bg)!important;color:var(--erp-ink)!important;font
 @media(min-width:1180px){#dashboard .revenue-panel{grid-template-columns:minmax(0,1.5fr) minmax(0,1.22fr) minmax(0,1.22fr) minmax(0,1fr) minmax(0,1fr)!important}}
 @media(max-width:1100px){#app .side{width:214px!important}#app .main{width:calc(100% - 214px)!important;padding:18px!important}}
 @media(max-width:760px){#app.shell{display:block!important}#app .side{width:100%!important;height:auto!important;position:relative!important;padding:11px!important;overflow:visible!important}#app .side .nav{display:flex!important;flex-direction:row!important;overflow-x:auto!important;gap:5px!important;padding:5px 0!important}#app .side .nav button{flex:0 0 auto!important;width:auto!important;min-height:36px!important;white-space:nowrap!important;padding:8px 10px!important}#app .side .subbrand{margin-bottom:7px!important}#app .main{width:100%!important;padding:12px!important}#app .top{align-items:flex-start!important}#app .filters{padding:10px!important}#app .panel{padding:12px!important}}
+
+/* v7.8 FIX: brand contrast wins over all previous ERP theme overrides */
+#app .side .brand.rz-home-logo .rz-logo-base{color:#ffffff!important;-webkit-text-fill-color:#ffffff!important;text-shadow:none!important}
+#app .side .brand.rz-home-logo .rz-logo-pink{color:#ff4ca6!important;-webkit-text-fill-color:#ff4ca6!important;text-shadow:0 0 13px rgba(255,76,166,.35)!important}
+#app .side .brand.rz-home-logo{font-weight:1000!important;letter-spacing:.15px!important;white-space:nowrap!important;font-size:clamp(19px,1.55vw,25px)!important}
+#managerPayroll .rz-mp-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:10px}
+#managerPayroll .rz-mp-summary>div{min-width:0}
+#managerPayroll .rz-mp-summary>div strong{overflow-wrap:anywhere}
+#managerPayroll .rz-mp-summary .rz-projected-reward{background:#fdf1fa!important;border:1px solid #f7b7db!important}
+#managerPayroll .rz-mp-summary .rz-projected-reward strong{color:#be2075!important}
 </style>
 </body></html>
